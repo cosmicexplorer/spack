@@ -27,32 +27,6 @@ def Iff(a, b):
     ])
 
 
-# def Uniquely(domain_expr_fun, finite_domain):
-#     finite_domain = list(finite_domain)
-#     return And([
-#         len(finite_domain) > 0,
-#         Or([
-#             domain_expr_fun(other)
-#             for other in finite_domain
-#         ]),
-#         And([
-#             Xor(o1, o2)
-#             Implies(domain_expr_fun(o1),
-#                     Not(domain_expr_fun(o2)))
-#             for o1, o2 in itertools.product(finite_domain, finite_domain)
-#             if not o1 == o2
-#         ]),
-#     ])
-
-
-# def UniquelyMap(cur_expr, domain_expr_fun, finite_domain):
-#     finite_domain = list(finite_domain)
-#     return Implies(cur_expr,
-#                    Uniquely(domain_expr_fun, finite_domain))
-
-
-assumptions = []  # type: List[Z3Expr]
-
 RepoSort, repos = EnumSort('RepoSort', ['spack', 'pypi', 'sonatype'])
 (spack, pypi, sonatype) = repos
 cur_repo = Const('cur_repo', RepoSort)
@@ -153,13 +127,16 @@ variant_for_spec_try_map = {
             },
         },
         '2.0.0': {
-            'variants': [None, debug],
+            'variants': [None, debug, idk],
             'dependencies': {
                 c: {
                     'low': '3.1.2',
                     'high': '3.1.2',
                     'prefer': neither,
                 },
+            },
+            'conflicts': {
+                c: '3.0.0',
             },
         },
         '2.1.3': {
@@ -179,7 +156,7 @@ variant_for_spec_try_map = {
             'dependencies': {},
         },
         '3.0.0': {
-            'variants': [None, idk],
+            'variants': [None, idk, debug],
             'dependencies': {},
         },
         '3.1.2': {
@@ -259,20 +236,19 @@ VariantValueMapSort.declare('multi',
 VariantValueMapSort = VariantValueMapSort.create()
 
 def as_variant_map(variant_pairs):
-    print('variant_pairs: {}'.format(variant_pairs))
+    # print('variant_pairs: {}'.format(variant_pairs))
     cur_map = VariantValueMapSort.empty
     for name, value in variant_pairs:
         if name is None:
             continue
         value = process_variant_for_spec(value)[0]
         value = as_variant_value(value)
-        print(value)
         tup = (
             name,
             value,
             cur_map,
         )
-        print(tup)
+        # print(tup)
         cur_map = VariantValueMapSort.multi(
             name,
             value,
@@ -510,7 +486,7 @@ def build_assumptions(with_conflict=False):
 
                 # TODO: Here's where we try to make a set!
                 # assumptions.append(
-                #     Implies(
+                #     Iff(
                 #         And([use_package(pkg), use_package(dep_pkg)]),
                 #         IsMember(dep_spec, get_dep_specs(pkg)),
                 #     )
@@ -551,13 +527,13 @@ def build_assumptions(with_conflict=False):
                 for v_spec_sourced in variant_specs:
                     v_spec = dict((k, v[0]) for k, v in v_spec_sourced.items())
                     variant_value_map = as_variant_map(v_spec.items())
-                    print('map: {}'.format(variant_value_map))
+                    # print('map: {}'.format(variant_value_map))
 
                     for v_name, v_value in v_spec.items():
                         if v_name is None:
                             continue
                         v_value = as_variant_value(v_value)
-                        print('v_name: {}, v_value2: {}'.format(v_name, v_value))
+                        # print('v_name: {}, v_value2: {}'.format(v_name, v_value))
 
                         assumptions.append(
                             (v_value == variant_for_map(variant_value_map, v_name)),
@@ -569,7 +545,7 @@ def build_assumptions(with_conflict=False):
                             variant_value_map,
                         ):
                             assumptions.append(
-                                (variant_for_spec(s) == v_value)
+                                (variant_for_spec(s, v_name) == v_value)
                             )
 
     return (assumptions, (pkg_mapping, pkg_inverse_mapping), conflicts_table, deps_table)
@@ -617,18 +593,22 @@ def ground_check(grounder, solver=None, with_conflict=False):
 
 robust_tactic = Then(
                      Tactic('macro-finder'),
-                     Tactic('sat'),
+                     Tactic('smt'),
                      Tactic('symmetry-reduce'),
-                     )
+                     Tactic('smt'),
+)
 
 s1, e1, m1, r1, tr1, u1, c1, g1, dt1 = ground_check((lambda _: [use_package(
-    mk_spec(a, mk_version(1, 5, 2), as_variant_map([(idk, 'idk3')])),
+    mk_spec(a, mk_version(1, 5, 2), as_variant_map([(idk, 'idk2'), (debug, 2)])),
 )]),
                                                     # solver=robust_tactic.solver(),
                                                     with_conflict=False)
 
+
+code.interact(local=locals())
+
 s2, e2, m2, r2, tr2, u2, c2, g2, dt2 = ground_check((lambda _: [use_package(
-    mk_spec(a, mk_version(1, 5, 2), as_variant_map([(idk, 'idk3')])),
+    mk_spec(a, mk_version(1, 5, 2), as_variant_map([(idk, 'idk2'), (debug, 2)])),
 )]),
                                                     # solver=robust_tactic.solver(),
                                                     with_conflict=True)
