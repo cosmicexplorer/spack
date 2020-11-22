@@ -27,28 +27,28 @@ def Iff(a, b):
     ])
 
 
-def Uniquely(domain_expr_fun, finite_domain):
-    finite_domain = list(finite_domain)
-    pairs = [
-        (k, v)
-        for k, v in itertools.product(finite_domain, repeat=2)
-        if not k == v
-    ]
-    return And([
-        Implies(domain_expr_fun(k), Not(domain_expr_fun(v)))
-        for k, v in pairs
-    ])
+# def Uniquely(domain_expr_fun, finite_domain):
+#     finite_domain = list(finite_domain)
+#     return And([
+#         len(finite_domain) > 0,
+#         Or([
+#             domain_expr_fun(other)
+#             for other in finite_domain
+#         ]),
+#         And([
+#             Xor(o1, o2)
+#             Implies(domain_expr_fun(o1),
+#                     Not(domain_expr_fun(o2)))
+#             for o1, o2 in itertools.product(finite_domain, finite_domain)
+#             if not o1 == o2
+#         ]),
+#     ])
 
 
-def UniquelyMap(cur_expr, domain_expr_fun, finite_domain):
-    finite_domain = list(finite_domain)
-    return And([
-        Implies(cur_expr, Or([
-            domain_expr_fun(el)
-            for el in finite_domain
-        ])),
-        Uniquely(domain_expr_fun, finite_domain),
-    ])
+# def UniquelyMap(cur_expr, domain_expr_fun, finite_domain):
+#     finite_domain = list(finite_domain)
+#     return Implies(cur_expr,
+#                    Uniquely(domain_expr_fun, finite_domain))
 
 
 assumptions = []  # type: List[Z3Expr]
@@ -127,7 +127,7 @@ variant_for_spec_try_map = {
                 },
             },
             'conflicts': {
-                b: '2.1.3',
+                c: '3.1.3',
             },
         },
     },
@@ -187,7 +187,7 @@ variant_for_spec_try_map = {
             'dependencies': {},
         },
         '3.1.3': {
-            'variants': [None, idk],
+            'variants': [None, idk, debug],
             'dependencies': {},
         },
     },
@@ -220,11 +220,21 @@ def as_variant_value(arg):
     if arg is None:
         return VariantValueSort.none
     if isinstance(arg, bool):
-        return VariantValueSort.some(ExplicitValueSort.boolean(arg))
+        return VariantValueSort.some(ExplicitValueSort.boolean(BoolVal(arg)))
     if isinstance(arg, int):
-        return VariantValueSort.some(ExplicitValueSort.integer(arg))
+        return VariantValueSort.some(ExplicitValueSort.integer(IntVal(arg)))
     if isinstance(arg, str):
         return VariantValueSort.some(ExplicitValueSort.string(StringVal(arg)))
+    if isinstance(arg, tuple) and len(arg) == 3:
+        if arg[1] in variant_sources:
+            arg = arg[2]
+        else:
+            arg = arg[1]
+        if isinstance(arg, int):
+            return as_variant_value(arg)
+        elif isinstance(arg, str):
+            return as_variant_value(arg)
+        return VariantValueSort.some(ExplicitValueSort.any(AnyConst))
     return arg
 
 def as_variant_description(**kwargs):
@@ -240,19 +250,34 @@ def as_variant_description(**kwargs):
     inner = ', '.join(inner_values)
     return "[{}]".format(inner)
 
-_VariantValueMap = Datatype('VariantValueMap')
-_VariantValueMap.declare('empty')
-_VariantValueMap.declare('multi',
-                         ('name', VariantNameSort),
-                         ('value', VariantValueSort),
-                         ('cdr', _VariantValueMap))
-VariantValueMapSort = _VariantValueMap.create()
+VariantValueMapSort = Datatype('VariantValueMapSort')
+VariantValueMapSort.declare('empty')
+VariantValueMapSort.declare('multi',
+                            ('name', VariantNameSort),
+                            ('value', VariantValueSort),
+                            ('cdr', VariantValueMapSort))
+VariantValueMapSort = VariantValueMapSort.create()
 
 def as_variant_map(variant_pairs):
+    print('variant_pairs: {}'.format(variant_pairs))
     cur_map = VariantValueMapSort.empty
     for name, value in variant_pairs:
-        (cur_value, _) = process_variant_for_spec(value)
-        cur_map = VariantValueMapSort.multi(name, as_variant_value(cur_value), cur_map)
+        if name is None:
+            continue
+        value = process_variant_for_spec(value)[0]
+        value = as_variant_value(value)
+        print(value)
+        tup = (
+            name,
+            value,
+            cur_map,
+        )
+        print(tup)
+        cur_map = VariantValueMapSort.multi(
+            name,
+            value,
+            cur_map,
+        )
     return cur_map
 
 variant_for_map = Function('variant_for_map',
@@ -263,11 +288,16 @@ SpecSort, mk_spec, (get_spec_name, get_spec_version, get_spec_variants) = TupleS
     [PackageNameSort, Semver3Sort, VariantValueMapSort])
 cur_pkg = Const('cur_pkg', SpecSort)
 
+def specs_like(name, ver, var_map):
+    yield mk_spec(name, ver, var_map)
+    while not var_map is VariantValueMapSort.empty:
+        yield mk_spec(
+            name, ver, VariantValueMapSort.cdr(var_map))
+
 dependency_matches_package_version = Function('dependency_matches_package_version',
                                               SpecSort, DepSpecSort, Semver3Sort, BoolSort())
 variant_for_spec = Function('variant_for_spec', SpecSort, VariantNameSort, VariantValueSort)
 get_dep_specs = Function('get_dep_specs', SpecSort, SetSort(DepSpecSort))
-has_dependency = Function('has_dependency', SpecSort, SpecSort, BoolSort())
 
 variant_get_value = Function('variant_get_value', SpecSort, VariantNameSort, VariantValueSort)
 variant_get_source = Function('variant_get_source', SpecSort, VariantNameSort, VariantSourceSort)
@@ -287,67 +317,16 @@ def process_variant_for_spec(variant_value):
         source = spec
     return (real_value, source)
 
-
 def build_assumptions(with_conflict=False):
     assumptions = []  # type: List[Z3Expr]
 
-    bool_vars = collections.defaultdict(lambda: collections.defaultdict(list))
     pkg_mapping = {}
     pkg_inverse_mapping = collections.defaultdict(dict)
     pkg_repos = collections.defaultdict(list)
 
     deps_table = collections.defaultdict(list)
-    conflicts_table = collections.defaultdict(list)
+    conflicts_table = collections.defaultdict(lambda: collections.defaultdict(list))
     variants_table = collections.defaultdict(dict)
-
-    vs = Const('vs', VariantSourceSort)
-    vn = Const('vn', VariantNameSort)
-    vv = Const('vv', VariantValueSort)
-    pkg1 = Const('pkg1', SpecSort)
-    pkg2 = Const('pkg2', SpecSort)
-
-    repo1 = Const('repo1', RepoSort)
-    pn1 = Const('pn1', PackageNameSort)
-    pn2 = Const('pn2', PackageNameSort)
-    assumptions.extend([
-        # The repo must contain the package in order for us to use it!
-        ForAll([pkg1, repo1], Implies(use_repo_package(pkg1, repo1),
-                                      repo_has_package(pkg1, repo1))),
-        # Checking that any package we consume comes from exactly one repo.
-        ForAll([pkg1],
-               Uniquely(lambda repo: repo_has_package(pkg1, repo),
-                        repos)),
-        # FIXME: Checking uniqueness by name!
-        ForAll([pkg1, pkg2],
-               Implies(
-                   And([(get_spec_name(pkg1) == get_spec_name(pkg2)),
-                        (pkg1 != pkg2),
-                        use_package(pkg1)]),
-                   Not(use_package(pkg2))))
-    ])
-
-    ver1 = Const('ver1', Semver3Sort)
-    ver2 = Const('ver2', Semver3Sort)
-    ver_ret = Const('ver_ret', Semver3Sort)
-    strat1 = Const('strat1', DepSpecStrategySort)
-    dep_spec1 = Const('dep_spec1', DepSpecSort)
-    assumptions.extend([
-        # ForAll([ver1, ver2, ver_ret],
-        #        Implies(And([ver_ret >= ver1, ver_ret < ver2]),
-        #                dependency_matches_version(mk_dep_spec(ver1, ver2, low), ver_ret))),
-        # ForAll([ver1, ver2, ver_ret],
-        #        Implies(And([ver_ret <= ver2, ver_ret > ver1]),
-        #                dependency_matches_version(mk_dep_spec(ver1, ver2, high), ver_ret))),
-        # ForAll([ver1, ver2, ver_ret],
-        #        Implies(And([(ver_ret == ver1), (ver1 == ver2)]),
-        #            dependency_matches_version(mk_dep_spec(ver1, ver2, neither), ver_ret))),
-    ])
-    assumptions.extend([
-        ForAll([dep_spec1, pkg1],
-               Iff(IsMember(dep_spec1, get_dep_specs(pkg1)),
-                   dependency_matches_package_version(pkg1, dep_spec1, ver_ret)))
-        for strat in strategies
-    ])
 
     # Iterate over every package!
     for name, version_map in variant_for_spec_try_map.items():
@@ -391,12 +370,14 @@ def build_assumptions(with_conflict=False):
                         assumptions.append(cur_assertion)
 
                     # Fill in the named variants in this spec.
+                    v_keys = list(v_spec.keys())
+                    not_v_keys = (set(variant_names) - set(v_keys))
                     assumptions.extend([
                         spec_has_variant(pkg, v_name)
-                        for v_name in v_spec.keys()
+                        for v_name in v_keys
                     ] + [
                         Not(spec_has_variant(pkg, not_v_name))
-                        for not_v_name in (set(variant_names) - set(v_spec.keys()))
+                        for not_v_name in not_v_keys
                     ])
 
                     assumptions.extend([
@@ -407,7 +388,7 @@ def build_assumptions(with_conflict=False):
                                         v_name))),
                                     yaml: (lambda: (variant_get_value(pkg, v_name) == variant_default_value_from_packages_yaml(
                                                        v_name))),
-                                    spec: (lambda: (variant_get_value(pkg, v_name) == variant_for_spec(pkg1, v_name))),
+                                    spec: (lambda: (variant_get_value(pkg, v_name) == variant_for_spec(pkg, v_name))),
                                 }[v_source]())
                         for v_name, v_source in v_sources.items()
                     ])
@@ -427,11 +408,11 @@ def build_assumptions(with_conflict=False):
                         if name in name_try_repo_map[repo]:
                             assumptions.append(repo_has_package(pkg, repo))
                             pkg_repos[pkg].append(repo)
-                            bool_vars[repo][name.sexpr()].append(pkg_bool_var)
                         else:
                             assumptions.append(Not(repo_has_package(pkg, repo)))
 
-                    for dep_name, this_dep_spec in dep_var_spec['dependencies'].items():
+                    deps = dep_var_spec['dependencies']
+                    for dep_name, this_dep_spec in deps.items():
                         low_version = mk_version(*version_columns(this_dep_spec['low']))
                         high_version = mk_version(*version_columns(this_dep_spec['high']))
                         prefer_strategy = this_dep_spec['prefer']
@@ -440,85 +421,158 @@ def build_assumptions(with_conflict=False):
 
                         deps_table[pkg].append((dep_name, dep_spec))
 
-                        assumptions.extend([
-                            # Fill in dependency specifications.
-                            IsMember(dep_spec, get_dep_specs(pkg)),
-                            # Fill in dependency assumptions.
-                            Implies(use_package(pkg), Or([
-                                dependency_matches_package_version(
-                                    pkg, dep_spec, mk_version(*other_version)
-                                )
-                                for other_version in package_version_try_map[dep_name]
-                            ])),
-                        ])
-
                     if with_conflict:
-                        for conflict_name, conflict_version in dep_var_spec.get('conflicts', {}).items():
-                            conflicts_table[pkg].append((conflict_name, conflict_version))
+                        conflicts = dep_var_spec.get('conflicts', {})
+                        if not conflicts:
+                            continue
+                        variants = dep_var_spec.get('variants', [])
+                        for p_name in names:
+                            if p_name in conflicts:
+                                conflicts_table[pkg][p_name].append((
+                                    conflicts[p_name],
+                                    variants,
+                                ))
+
+    for pkg, pkg_repos in pkg_repos.items():
+        # The repo must contain the package in order for us to use it!
+        assumptions.extend(
+            Implies(
+                use_repo_package(pkg, r),
+                repo_has_package(pkg, r),
+            )
+            for r in pkg_repos
+        )
+
+        # Checking that any package we consume comes from exactly one repo.
+        assumptions.extend(
+            Implies(
+                use_repo_package(pkg, r),
+                Not(use_repo_package(pkg, s)),
+            )
+            for r, s in itertools.product(pkg_repos, repeat=2)
+            if not s == r
+        )
 
     for pkg, dep_specs in deps_table.items():
         for dep_name, dep_spec in dep_specs:
-            assumptions.append(
-                UniquelyMap(
-                    use_package(pkg),
-                    (lambda other: has_dependency(pkg, pkg_inverse_mapping[dep_name][other][0])),
-                    package_version_try_map[dep_name])
-            )
-
             low_end = get_low(dep_spec)
             high_end = get_high(dep_spec)
             strategy = get_strategy(dep_spec)
 
+            # Here's where we provide dependency ranges!
             for other in package_version_try_map[dep_name]:
                 other_version = mk_version(*other)
-                assumptions.extend([
-                    dependency_matches_package_version(pkg, dep_spec, other_version),
+                assumptions.append(
                     Implies(
                         And([
-                            other_version >= low_end,
-                            other_version < high_end,
-                            strategy == low,
+                            (other_version >= low_end),
+                            (other_version < high_end),
+                            (strategy == low),
                         ]),
-                        dependency_matches_package_version(pkg, dep_spec, other_version)),
+                        dependency_matches_package_version(pkg, dep_spec, other_version),
+                    )
+                )
+                assumptions.append(
                     Implies(
                         And([
-                            other_version <= high_end,
-                            other_version >  low_end,
-                            strategy == high,
+                            (other_version <= high_end),
+                            (other_version >  low_end),
+                            (strategy == high),
                         ]),
-                        dependency_matches_package_version(pkg, dep_spec, other_version)),
+                        dependency_matches_package_version(pkg, dep_spec, other_version),
+                    )
+                )
+
+                assumptions.append(
                     Implies(
                         And([
-                            other_version == low_end,
-                            low_end == high_end,
-                            strategy = neither,
+                            (other_version == low_end),
+                            (low_end == high_end),
+                            (strategy == neither),
                         ]),
-                        dependency_matches_package_version(pkg, dep_spec, other_version)),
-                ])
+                        dependency_matches_package_version(pkg, dep_spec, other_version),
+                    )
+                )
 
                 dep_pkg = pkg_inverse_mapping[dep_name][other][0]
-                for v_name, v_value in variants_table[pkg].items():
-                    assumptions.append(
-                        Iff(has_dependency(pkg, dep_pkg),
-                            And([
-                                use_package(pkg),
-                                use_package(dep_pkg),
-                                spec_has_variant(pkg, v_name),
-                                spec_has_variant(dep_pkg, v_name),
-                                (variant_get_value(pkg, v_name) == variant_get_value(dep_pkg, v_name)),
-                            ]))
+                other_pkgs_by_name = [v[0] for k, v in pkg_inverse_mapping[dep_name].items()
+                                      if k != other]
+
+                assumptions.append(
+                    Xor(
+                        use_package(dep_pkg),
+                        Or([
+                            use_package(op)
+                            for op in other_pkgs_by_name
+                        ]),
                     )
+                )
+
+                # TODO: Here's where we try to make a set!
+                # assumptions.append(
+                #     Implies(
+                #         And([use_package(pkg), use_package(dep_pkg)]),
+                #         IsMember(dep_spec, get_dep_specs(pkg)),
+                #     )
+                # )
+
+                assumptions.extend(
+                    Implies(
+                        And([use_package(pkg), use_package(dep_pkg),
+                             spec_has_variant(pkg, v_name),
+                             spec_has_variant(dep_pkg, v_name)]),
+                        (variant_get_value(pkg, v_name) == variant_get_value(dep_pkg, v_name)),
+                    )
+                    for v_name, v_value in variants_table[pkg].items()
+                )
 
     for pkg, conflicts in conflicts_table.items():
-        for conflict_name, conflict_version in conflicts:
-            conflicting_pkg_entries = pkg_inverse_mapping[conflict_name]
-            (conflicting_package, _map) = conflicting_pkg_entries[
-                version_columns(conflict_version)
-            ]
-            assumptions.append(
-                Conflict([use_package(pkg), use_package(conflicting_package)]))
+        for conflict_name, conflict_infos in conflicts.items():
+            for conflict_version, child_variants in conflict_infos:
+                c_v_tup = version_columns(conflict_version)
+                conflicting_package = pkg_inverse_mapping[conflict_name][c_v_tup][0]
+                parent_variants = (
+                    variant_for_spec_try_map[conflict_name][conflict_version].get('variants', []))
+                # FIXME: just intersecting variants for now!
+                relevant_variants = list(set(child_variants) & set(parent_variants))
 
-    return (assumptions, pkg_inverse_mapping)
+                variant_specs = [
+                    dict(zip(relevant_variants,
+                             list((v_val, process_variant_for_spec(v_val))
+                                 for v_val in values)))
+                    for values in
+                    itertools.product(*tuple(
+                        variant_try_value_map[n]
+                        for n in relevant_variants
+                        if n is not None
+                    ))
+                ]
+
+                for v_spec_sourced in variant_specs:
+                    v_spec = dict((k, v[0]) for k, v in v_spec_sourced.items())
+                    variant_value_map = as_variant_map(v_spec.items())
+                    print('map: {}'.format(variant_value_map))
+
+                    for v_name, v_value in v_spec.items():
+                        if v_name is None:
+                            continue
+                        v_value = as_variant_value(v_value)
+                        print('v_name: {}, v_value2: {}'.format(v_name, v_value))
+
+                        assumptions.append(
+                            (v_value == variant_for_map(variant_value_map, v_name)),
+                        )
+
+                        for s in specs_like(
+                            conflict_name,
+                            mk_version(*c_v_tup),
+                            variant_value_map,
+                        ):
+                            assumptions.append(
+                                (variant_for_spec(s) == v_value)
+                            )
+
+    return (assumptions, (pkg_mapping, pkg_inverse_mapping), conflicts_table, deps_table)
 
 # BoolVarsDict = Dict[RepoSort, Dict[str, List[Bool]]]
 
@@ -527,41 +581,58 @@ def install_check(problems, solver=None):
     if solver is None:
         solver = Solver()
     result = solver.check(problems)
+    truths = []
+    unsat_core = []
     if result == sat:
         m = solver.model()
-        r = []
         for x in m:
             if is_true(m[x]):
                 # x is a Z3 declaration
                 # x() returns the Z3 expression
                 # x.name() returns a string
-                r.append("name: {name} == value: {value}".format(name=x.name(), value=x()))
-        print('\n'.join(r))
-    else:
-        print("'{}' installation profile".format(result))
-    return solver
+                truths.append("name: {name} == value: {value}".format(name=x.name(), value=x()))
+    elif result == unsat:
+        unsat_core = solver.unsat_core()
+    return (solver, result, truths, unsat_core)
 
 
 def ground_check(grounder, solver=None, with_conflict=False):
     # type: (List[Z3Expr], Optional[Solver], bool) -> Tuple[BoolVarsDict, List[Bool], Solver]
-    (assumptions, pkg_inverse_mapping) = build_assumptions(with_conflict=with_conflict)
-    all_exprs = assumptions + list(grounder(pkg_inverse_mapping))
-    s = install_check(all_exprs, solver=solver)
-    return (s, all_exprs, pkg_inverse_mapping)
+    (assumptions, pkg_mappings, conflicts_table, deps_table) = build_assumptions(
+        with_conflict=with_conflict)
+    grounds_maybe = list(grounder(pkg_mappings))
+    print('grounds: {}'.format(grounds_maybe))
+    all_exprs = assumptions + grounds_maybe
+    (s, result, truths, unsat_core) = install_check(all_exprs, solver=solver)
+    if result == sat:
+        print('TRUTHS:\n{}'.format('\n'.join(truths)))
+    elif result == unknown:
+        print('UNKNOWN:\n{}'.format(s.reason_unknown()))
+    elif result == unsat:
+        print('UNSAT_CORE():\n{}'.format(s.unsat_core()))
+    else:
+        raise OSError('unrecognized result {}'.format(result))
+    return (s, all_exprs, pkg_mappings, result, truths, unsat_core, conflicts_table, grounds_maybe, deps_table)
 
-robust_tactic = Then(TryFor(Tactic('horn-simplify'), 5000),
-                     TryFor(Tactic('macro-finder'), 1000),
-                     TryFor(Tactic('sat'), 10000))
 
+robust_tactic = Then(
+                     Tactic('macro-finder'),
+                     Tactic('sat'),
+                     Tactic('symmetry-reduce'),
+                     )
 
-s1, e1, m1 = ground_check(lambda m: [use_package(m[a][(1, 5, 2)][0])],
-                          solver=robust_tactic.solver(),
-                          with_conflict=False)
+s1, e1, m1, r1, tr1, u1, c1, g1, dt1 = ground_check((lambda _: [use_package(
+    mk_spec(a, mk_version(1, 5, 2), as_variant_map([(idk, 'idk3')])),
+)]),
+                                                    # solver=robust_tactic.solver(),
+                                                    with_conflict=False)
 
-s2, e2, m1 = ground_check(lambda m: [use_package(m[a][(1, 5, 2)][0])],
-                          solver=robust_tactic.solver(),
-                          with_conflict=True)
+s2, e2, m2, r2, tr2, u2, c2, g2, dt2 = ground_check((lambda _: [use_package(
+    mk_spec(a, mk_version(1, 5, 2), as_variant_map([(idk, 'idk3')])),
+)]),
+                                                    # solver=robust_tactic.solver(),
+                                                    with_conflict=True)
+
 core2 = s2.unsat_core()
-print("s2.unsat_core():\n{}".format('\n'.join(str(e) for e in core2)))
 
 code.interact(local=locals())
