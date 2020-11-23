@@ -3,10 +3,34 @@ from __future__ import absolute_import, print_function
 import code
 import collections
 import itertools
+from abc import ABC, abstractmethod
+from contextlib import contextmanager
 # from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from z3 import *
 
+from spack.solver.asp import *
+
+
+class Timer(Timer):
+    def __init__(self):
+        super().__init__()
+        self.superphase = ''
+
+    def phase(self, name, sep='/'):
+        return super().phase(self.superphase + sep + name)
+
+    @contextmanager
+    def nested_phase(self, subname, sub_phase='<subphase>', sep='/'):
+        orig = self.superphase
+        self.superphase += sep
+        self.superphase += subname
+        try:
+            self.phase(sub_phase, sep=sep)
+            yield self
+        finally:
+            self.superphase = orig
+            self.phase('')
 
 # Z3Expr = Union[Bool, And, Or, Not, Implies]
 

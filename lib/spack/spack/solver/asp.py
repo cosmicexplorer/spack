@@ -1,4 +1,4 @@
-# Copyright 2013-2019 Lawrence Livermore National Security, LLC and other
+ Copyright 2013-2019 Lawrence Livermore National Security, LLC and other
 # Spack Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -52,12 +52,13 @@ class Timer(object):
     def __init__(self):
         self.start = time.time()
         self.last = self.start
-        self.phases = {}
+        self.phases = defaultdict(lambda: 0)
 
     def phase(self, name):
+        prev_value = self.phases[name]
         last = self.last
         now = time.time()
-        self.phases[name] = now - last
+        self.phases[name] = (now - last) + prev_value
         self.last = now
 
     def write(self, out=sys.stdout):
