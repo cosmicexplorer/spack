@@ -3,36 +3,47 @@ from __future__ import absolute_import, print_function
 import code
 import collections
 import itertools
-from abc import ABC, abstractmethod
+import re
 from contextlib import contextmanager
 # from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from z3 import *
 
-from spack.solver.asp import *
+# from spack.solver.asp import *
 
 
-class Timer(Timer):
-    def __init__(self):
-        super().__init__()
-        self.superphase = ''
+# class Timer(Timer):
+#     def __init__(self):
+#         super().__init__()
+#         self.superphase = ''
 
-    def phase(self, name, sep='/'):
-        return super().phase(self.superphase + sep + name)
+#     def phase(self, name, sep='/'):
+#         return super().phase(self.superphase + sep + name)
 
-    @contextmanager
-    def nested_phase(self, subname, sub_phase='<subphase>', sep='/'):
-        orig = self.superphase
-        self.superphase += sep
-        self.superphase += subname
-        try:
-            self.phase(sub_phase, sep=sep)
-            yield self
-        finally:
-            self.superphase = orig
-            self.phase('')
+#     @contextmanager
+#     def nested_phase(self, subname, sub_phase='<subphase>', sep='/'):
+#         orig = self.superphase
+#         self.superphase += sep
+#         self.superphase += subname
+#         try:
+#             self.phase(sub_phase, sep=sep)
+#             yield self
+#         finally:
+#             self.superphase = orig
+#             self.phase('')
 
-# Z3Expr = Union[Bool, And, Or, Not, Implies]
+
+# From ExprRef.__doc__ in z3.py:
+"""Constraints, formulas and terms are expressions in Z3.
+
+Expressions are ASTs. Every expression has a sort.
+There are three main kinds of expressions:
+function applications, quantifiers and bounded variables.
+A constant is a function application with 0 arguments.
+For quantifier free problems, all expressions are
+function applications.
+"""
+Z3Expr = ExprRef
 
 def DependsOn(pack, deps):
     # type: (SpecSort, Iterable[SpecSort]) -> Z3Expr
@@ -64,9 +75,26 @@ name_try_repo_map = {
     sonatype: [],
 }
 
-# These all need to be normalized to the semver 3-tuple to be lexicographically sorted!
+# Versions need to be normalized to the semver 3-tuple to be lexicographically sorted!
+# TODO: We currently allow "trailing garbage" in the string, captured in the 4th group, without
+# interpreting it.
+semver_input_versions_pattern = re.compile(r'^([0-9]+)((\.[0-9]+)*)(.*?)$')
+
 def version_columns(version_string):
-    return tuple(int(n) for n in version_string.split('.'))
+    # type: (str) -> Tuple[int, int, int]
+    semver_match = semver_input_versions_pattern.match(version_string)
+    if semver_match:
+        major = int(semver_match.group(1))
+        subs_string = semver_match.group(2)
+        # Remove initial '.', then split by the other '.'s.
+        subs = [int(sub) for sub in subs_string[1:].split('.')]
+        if len(subs) < 2:
+            # Pad out to three zeros.
+            subs = [0, 0]
+        # Otherwise, capture only the first 3 numeric versions.
+        return (major,) + tuple(subs[:2])
+    else:
+        raise TypeError('received unknown version string: {}'.format(version_string))
 
 Semver3Sort, mk_version, (ver1, ver2, ver3) = TupleSort(
     'Semver3Sort',
