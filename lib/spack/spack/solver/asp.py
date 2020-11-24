@@ -52,19 +52,52 @@ class Timer(object):
     def __init__(self):
         self.start = time.time()
         self.last = self.start
-        self.phases = defaultdict(lambda: 0)
+        self.phases = collections.defaultdict(lambda: 0)
+        self._prev_name = None
 
-    def phase(self, name):
-        prev_value = self.phases[name]
+    def phase(self, name, out=sys.stderr):
         last = self.last
         now = time.time()
-        self.phases[name] = (now - last) + prev_value
+        prev_value = self.phases[name]
+        self.phases[name] += now - last
         self.last = now
+        out.write("phase {} starting with previous value {}\n"
+                  .format(name, prev_value))
+        if self._prev_name is not None:
+            self.phases[self._prev_name] += now - last
+        self._prev_name = name
 
     def write(self, out=sys.stdout):
         now = time.time()
-        out.write("Time:\n")
+        if self._prev_name is not None:
+            self.phases[self._prev_name] += now - self.last
+        out.write("Time (separate):\n")
         for phase, t in self.phases.items():
+            out.write("    %-15s%.4f\n" % (phase + ":", t))
+
+        out.write("Time (cumulative):\n")
+        def cmp_phases(a, b):
+            if a == b:
+                return 0
+            if a in b:
+                return +1
+            if b in a:
+                return -1
+            # Cannot establish substring relationship -- fall back to lexicographic sorting.
+            if a < b:
+                return -1
+            if a > b:
+                return +1
+            assert 'should never get here!', (a, b)
+        sorted_order = sorted(self.phases.keys(),
+                              cmp=cmp_phases)
+        for i, phase in enumerate(sorted_order):
+            for inner_phase in sorted_order[i+1:]:
+                if phase in inner_phase:
+                    assert phase != inner_phase
+                    self.phases[inner_phase] += self.phases[phase]
+        for phase in reversed(sorted_order):
+            t = self.phases[phase]
             out.write("    %-15s%.4f\n" % (phase + ":", t))
         out.write("Total: %.4f\n" % (now - self.start))
 

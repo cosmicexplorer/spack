@@ -11,6 +11,27 @@ from z3 import *
 
 from spack.solver.asp import Timer as _Timer
 
+
+class Timer(_Timer):
+    def __init__(self):
+        _Timer.__init__(self)
+        self.superphase = ''
+
+    def phase(self, name, sep='/'):
+        return _Timer.phase(self, self.superphase + sep + name)
+
+    @contextmanager
+    def nested_phase(self, subname, sep='/'):
+        orig = self.superphase
+        self.superphase += sep
+        self.superphase += subname
+        try:
+            self.phase('', sep=sep)
+            yield self
+        finally:
+            self.superphase = orig
+            self.phase('')
+
 ### Generate the model.
 
 # From ExprRef.__doc__ in z3.py:
@@ -596,68 +617,50 @@ def build_assumptions(with_conflict=False):
 
 ### Execute the model.
 
-def install_check(problems, solver=None):
+def install_check(problems, timer=Timer(), solver=None):
     # type: (Iterable[Z3Expr], Optional[Solver]) -> Solver
-    if solver is None:
-        solver = Solver()
-    result = solver.check(problems)
-    truths = []
-    unsat_core = []
-    if result == sat:
-        m = solver.model()
-        for x in m:
-            if is_true(m[x]):
-                # x is a Z3 declaration
-                # x() returns the Z3 expression
-                # x.name() returns a string
-                if x.name() == str(x()):
-                    truth = x.name()
-                else:
-                    truth = "name: {name} == value: {value}".format(name=x.name(), value=x())
-                truths.append(truth)
-    elif result == unsat:
-        unsat_core = solver.unsat_core()
-    return (solver, result, truths, unsat_core)
+    with timer.nested_phase('solve'):
+        if solver is None:
+            solver = Solver()
+        result = solver.check(problems)
+        truths = []
+        unsat_core = []
+        if result == sat:
+            m = solver.model()
+            for x in m:
+                if is_true(m[x]):
+                    # x is a Z3 declaration
+                    # x() returns the Z3 expression
+                    # x.name() returns a string
+                    if x.name() == str(x()):
+                        truth = x.name()
+                    else:
+                        truth = "name: {name} == value: {value}".format(name=x.name(), value=x())
+                    truths.append(truth)
+        elif result == unsat:
+            unsat_core = solver.unsat_core()
+        return (solver, result, truths, unsat_core)
 
 
-def ground_check(grounder, solver=None, with_conflict=False):
+def ground_check(grounder, solver=None, timer=Timer(), with_conflict=False):
     # type: (List[Z3Expr], Optional[Solver], bool) -> Tuple[BoolVarsDict, List[Bool], Solver]
-    (assumptions, pkg_mappings, conflicts_table, deps_table, all_packages_by_name) = build_assumptions(
-        with_conflict=with_conflict)
-    grounds_maybe = list(grounder(all_packages_by_name))
-    print('grounds: {}'.format(grounds_maybe))
-    all_exprs = assumptions + grounds_maybe
-    (s, result, truths, unsat_core) = install_check(all_exprs, solver=solver)
-    if result == sat:
-        print('TRUTHS:\n{}'.format('\n'.join(truths)))
-    elif result == unknown:
-        print('UNKNOWN:\n{}'.format(s.reason_unknown()))
-    elif result == unsat:
-        print('UNSAT_CORE():\n{}'.format(s.unsat_core()))
-    else:
-        raise OSError('unrecognized result {}'.format(result))
-    return (s, all_exprs, pkg_mappings, result, truths, unsat_core, conflicts_table, grounds_maybe, deps_table)
-
-
-class Timer(_Timer):
-    def __init__(self):
-        _Timer.__init__(self)
-        self.superphase = ''
-
-    def phase(self, name, sep='/'):
-        return _Timer.phase(self, self.superphase + sep + name)
-
-    @contextmanager
-    def nested_phase(self, subname, sep='/'):
-        orig = self.superphase
-        self.superphase += sep
-        self.superphase += subname
-        try:
-            self.phase('', sep=sep)
-            yield self
-        finally:
-            self.superphase = orig
-            self.phase('')
+    with timer.nested_phase('build assumptions'):
+        (assumptions, pkg_mappings, conflicts_table, deps_table, all_packages_by_name) = build_assumptions(
+            with_conflict=with_conflict)
+    with timer.nested_phase('install check'):
+        grounds_maybe = list(grounder(all_packages_by_name))
+        print('grounds: {}'.format(grounds_maybe))
+        all_exprs = assumptions + grounds_maybe
+        (s, result, truths, unsat_core) = install_check(all_exprs, timer=timer, solver=solver)
+        if result == sat:
+            print('TRUTHS:\n{}'.format('\n'.join(truths)))
+        elif result == unknown:
+            print('UNKNOWN:\n{}'.format(s.reason_unknown()))
+        elif result == unsat:
+            print('UNSAT_CORE():\n{}'.format(s.unsat_core()))
+        else:
+            raise OSError('unrecognized result {}'.format(result))
+        return (s, all_exprs, pkg_mappings, result, truths, unsat_core, conflicts_table, grounds_maybe, deps_table)
 
 
 def solve(timer=Timer(), interact=False):
@@ -671,6 +674,7 @@ def solve(timer=Timer(), interact=False):
 
     with timer.nested_phase('solve 1'):
         s1, e1, m1, r1, tr1, u1, c1, g1, dt1 = ground_check((lambda by_name: [by_name['a==1.5.2+[+debug=0]'][1]]),
+                                                            timer=timer,
                                                             # solver=robust_tactic.solver(),
                                                             with_conflict=False)
         with timer.nested_phase('check 1'):
@@ -683,6 +687,7 @@ def solve(timer=Timer(), interact=False):
 
     with timer.nested_phase('solve 2'):
         s2, e2, m2, r2, tr2, u2, c2, g2, dt2 = ground_check((lambda by_name: [by_name['a==1.5.2+[+debug=0]'][1]]),
+                                                            timer=timer,
                                                             # solver=robust_tactic.solver(),
                                                             with_conflict=True)
         with timer.nested_phase('check 2'):
