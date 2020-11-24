@@ -73,6 +73,12 @@ Semver3Sort, mk_version, (ver1, ver2, ver3) = TupleSort(
 VariantNameSort, variant_names = EnumSort('VariantNameSort', ['release', 'debug', 'idk'])
 (release, debug, idk) = variant_names
 
+default_variants_try_map = {
+    release: (False, True),
+    debug: (0, 1),
+    idk: ('idk1', 'idk2'),
+}
+
 variant_single_value = Function('variant_single_value', VariantNameSort, BoolSort())
 
 VariantSourceSort, variant_sources = EnumSort('VariantSourceSort', ['spec', 'py', 'yaml'])
@@ -210,11 +216,6 @@ VariantValueSort = _VariantValue.create()
 
 cur_variant_value = Const('cur_variant_value', VariantValueSort)
 
-variant_default_value_from_package_py = Function('variant_default_value_from_package_py',
-                                                  VariantNameSort, VariantValueSort)
-variant_default_value_from_packages_yaml = Function('variant_default_value_from_packages_yaml',
-                                                    VariantNameSort, VariantValueSort)
-
 
 def as_variant_value(arg):
     if arg is None:
@@ -317,6 +318,51 @@ def process_variant_for_spec(variant_value):
         source = spec
     return (real_value, source)
 
+def static_or_quantified_assumptions(all_packages):
+    """Explicitly enumerate some function values over all packages and all variant names."""
+    all_packages = frozenset(all_packages)
+    assumptions = []
+
+    for pkg in all_packages:
+        # Assume all specified variants are of matching value.
+        for dep_pkg in all_packages:
+            if not dep_pkg == pkg:
+                for v_name in variant_names:
+                    assumptions.append(
+                        Implies(
+                            # ...in all *transitive* dependencies.
+                            And([use_package(pkg),
+                                 use_package(dep_pkg),
+                                 spec_has_variant(pkg, v_name),
+                                 spec_has_variant(dep_pkg, v_name)]),
+                            (variant_get_value(pkg, v_name) == variant_get_value(dep_pkg, v_name)),
+                        )
+                    )
+
+        # Fill in variant source specifications.
+        for v_name in variant_names:
+            assumptions.append(
+                (variant_for_spec(pkg, v_name) == (
+                           variant_for_map(get_spec_variants(pkg), v_name)))
+            )
+            assumptions.append(
+                Implies((variant_get_source(pkg, v_name) == py),
+                        (variant_get_value(pkg, v_name) == (
+                            as_variant_value(default_variants_try_map[v_name][0]))))
+            )
+            assumptions.append(
+                Implies((variant_get_source(pkg, v_name) == yaml),
+                        (variant_get_value(pkg, v_name) == (
+                            as_variant_value(default_variants_try_map[v_name][1]))))
+            )
+            assumptions.append(
+                Implies((variant_get_source(pkg, v_name) == spec),
+                               (variant_get_value(pkg, v_name) == (
+                                   variant_for_spec(pkg, v_name))))
+            )
+
+    return assumptions
+
 def build_assumptions(with_conflict=False):
     assumptions = []  # type: List[Z3Expr]
 
@@ -368,15 +414,14 @@ def build_assumptions(with_conflict=False):
                         v_value = as_variant_value(v_value)
                         assumptions.extend([
                             (variant_for_map(variant_value_map, v_name) == v_value),
-                            (variant_for_spec(pkg, v_name) == v_value),
                         ])
+
 
                     pkg = mk_spec(name, version, variant_value_map)
                     variants_table[pkg] = v_spec.copy()
                     # Fill in the appropriate variant sources for this package.
                     for v_name, v_source in v_sources.items():
-                        cur_assertion = (variant_get_source(pkg, v_name) == v_source)
-                        assumptions.append(cur_assertion)
+                        assumptions.append(variant_get_source(pkg, v_name) == v_source)
 
                     # Fill in the named variants in this spec.
                     v_keys = list(v_spec.keys())
@@ -387,19 +432,6 @@ def build_assumptions(with_conflict=False):
                     ] + [
                         Not(spec_has_variant(pkg, not_v_name))
                         for not_v_name in not_v_keys
-                    ])
-
-                    assumptions.extend([
-                        # Fill in variant source specifications.
-                        Implies((variant_get_source(pkg, v_name) == v_source),
-                                {
-                                    py: (lambda: (variant_get_value(pkg, v_name) == variant_default_value_from_package_py(
-                                        v_name))),
-                                    yaml: (lambda: (variant_get_value(pkg, v_name) == variant_default_value_from_packages_yaml(
-                                                       v_name))),
-                                    spec: (lambda: (variant_get_value(pkg, v_name) == variant_for_spec(pkg, v_name))),
-                                }[v_source]())
-                        for v_name, v_source in v_sources.items()
                     ])
 
                     kwarg_spec = dict((n.sexpr(), v) for n, v in v_spec.items())
@@ -541,20 +573,6 @@ def build_assumptions(with_conflict=False):
                     #     )
                     # )
 
-    for pkg in all_packages:
-        for other_pkg in all_packages:
-            if not other_pkg == pkg:
-                # Assume all specified variants are of matching value.
-                assumptions.extend(
-                    Implies(
-                        And([use_this_dependency(pkg, dep_pkg),
-                             spec_has_variant(pkg, v_name),
-                             spec_has_variant(dep_pkg, v_name)]),
-                        (variant_get_value(pkg, v_name) == variant_get_value(dep_pkg, v_name)),
-                    )
-                    for v_name in variant_names
-                )
-
     # NB: This is just parsing the conflicts as specified in 'conflicts' in variant_for_spec_try_map!
     for pkg, conflicts in conflicts_table.items():
         for conflict_name, conflict_infos in conflicts.items():
@@ -568,6 +586,8 @@ def build_assumptions(with_conflict=False):
                             Not(use_package(conflict_pkg)),
                         )
                     )
+
+    assumptions.extend(static_or_quantified_assumptions(all_packages))
 
 
     return (assumptions, (pkg_mapping, pkg_inverse_mapping), conflicts_table, deps_table, all_packages_by_name)
