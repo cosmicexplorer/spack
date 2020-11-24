@@ -22,6 +22,8 @@ from spack.util.mock_package import MockPackageMultiRepo
 import spack.compilers
 import spack.platforms.test
 
+from spack.solver.z3 import solve
+
 
 def check_spec(abstract, concrete):
     if abstract.versions.concrete:
@@ -112,6 +114,10 @@ def current_host(request, monkeypatch):
 
     # clear any test values fetched
     spack.architecture.get_platform.cache.clear()
+
+
+def test_z3():
+    solve()
 
 
 # This must use the mutable_config fixture because the test
