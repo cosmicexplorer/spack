@@ -113,6 +113,8 @@ def enum_type(all_values):
                 self.inner = inner
             def convert_to_z3(self):
                 return self.inner
+            def __str__(self):
+                return str(self.inner)
             def __repr__(self):
                 return '{}({!r})'.format(type(self).__name__,
                                          self.inner)
@@ -211,8 +213,15 @@ class PackageName(IntoZ3):
     def convert_to_z3(self):
         return StringVal(self.name)
 
+    def version_pin_spec(self, version):
+        # type: (SpackVersion) -> str
+        return '{}@{}'.format(self, version)
+
+    def __str__(self):
+        return self.name
+
     def __repr__(self):
-        return 'PackageName({})'.format(self.name)
+        return 'PackageName({!r})'.format(self.name)
 
 name_try_repo_map = {
     Repo(spack): ['a', 'b'],
@@ -220,16 +229,29 @@ name_try_repo_map = {
     Repo(sonatype): [],
 }
 
+
+def ensure_binary_string(s):
+    # type: Any -> str
+    print(s)
+    if isinstance(s, unicode):
+        return s.encode('utf-8')
+    if isinstance(s, str):
+        return s
+    if isinstance(s, bytes):
+        return s.decode('utf-8')
+    raise Exception('should never get here! had s = {}'.format(s))
+
 # T = TypeVar('T')
 
 def assume_unique(along, condition_expr_fn, gen_expr_fn,
-                  fmt=lambda x: "UniqueConstraint(arg={})".format(x)):
+                  fmt=(lambda x: "∃!x∈{} s.t. {}. Case of: x = {}."
+                       .format(list(along), gen_expr_fn(x), x))):
     # type: (Iterable[T], Callable[[], Z3Expr], Callable[[T], Z3Expr], str) -> List[Z3Expr]
     along = list(along)
 
     # See https://stackoverflow.com/questions/43081929/k-out-of-n-constraint-in-z3py/43081930#43081930.
     assumptions = []  # type: List[T]
-    bvars = [Bool(fmt(x)) for x in along]
+    bvars = [Bool(ensure_binary_string(fmt(x))) for x in along]
     assumptions.extend(
         gen_expr_fn(x) == bv
         for x, bv in zip(along, bvars)
@@ -269,6 +291,9 @@ class SpackVersion(IntoZ3):
 
     def __repr__(self):
         return '{}({!r})'.format(type(self).__name__, self.version)
+
+    def __str__(self):
+        return self.version.string
 
 
 DepSpecStrategySort, strategies = EnumSort('DepSpecStrategySort', ['low', 'high', 'neither'])
@@ -459,6 +484,12 @@ class PackageIdentity(IntoZ3):
         # type: (Any) -> PackageIdentity
         raise NotImplemented
 
+    def __str__(self):
+        return self.hash_string
+
+    def __repr__(self):
+        return '{}({!r})'.format(type(self).__name__, self.hash_string)
+
 
 package_associate_name = Function('package_associate_name',
                                   PackageIdentitySort, PackageNameSort)
@@ -545,7 +576,7 @@ class StaticVersionSolverSetup(VersionSolverSetup):
         def from_package_descriptor(cls, pkg_descriptor):
             # type: (Tuple[PackageName, SpackVersion]) -> StaticPackageIdentity
             name, version = pkg_descriptor
-            s = "{}=={}".format(name, version)
+            s = 'FAKE::[{}]'.format(name.version_pin_spec(version))
             return cls(s)
 
     def all_repo_packages(self, repo, with_conflict=False):
@@ -584,7 +615,7 @@ class StaticVersionSolverSetup(VersionSolverSetup):
                 else:
                     conflict_set = ConflictSet.empty()
 
-                var_string = "{}=={}".format(name, version_string)
+                var_string = name.version_pin_spec(version)
                 pkg = (
                     StaticVersionSolverSetup
                     .StaticPackageIdentity
@@ -666,8 +697,11 @@ def generate_fake_input(
                 all_matching_deps,
                 condition_expr_fn=(lambda: use_package(pkg.into_z3())),
                 gen_expr_fn=(lambda dep_pkg: use_this_dependency(pkg.into_z3(), dep_pkg.into_z3())),
-                fmt=(lambda dep_pkg: ("UniqueFulfillDependencyConstraint(package={}|dep_pkg=)"
-                                      .format(pkg, dep_pkg))),
+                fmt=(lambda dep_pkg: (
+                    "use_package(p = {}) => ∃!d∈{{P_dependencies(p)}} s.t. "
+                    "use_this_dependency(p, d). case of: d = {}."
+                    .format(pkg, dep_pkg)
+                    .decode('utf-8').encode('utf-8'))),
             )
             assumptions.extend(unique_dependency_assumptions)
 
@@ -682,11 +716,16 @@ def generate_fake_input(
         for conflict_spec in conflict_set:
             c_name = conflict_spec.name
             c_version = conflict_spec.version
-            for conflict_pkg in solver_setup.reverse_lookup_package_version(c_name, c_version):
-                assumptions.append(
-                    Implies(use_package(pkg.into_z3()),
-                            Not(use_package(conflict_pkg.into_z3()))),
+            conflict_pkgs = list(solver_setup.reverse_lookup_package_version(c_name, c_version))
+            assumptions.append(
+                Implies(
+                    use_package(pkg.into_z3()),
+                    Not(Or([
+                        use_package(conflict_pkg.into_z3())
+                        for conflict_pkg in conflict_pkgs
+                    ])),
                 )
+            )
 
     for pkg, pkg_repos in repo_by_pkg.items():
         # The repo must contain the package in order for us to use it!
@@ -706,8 +745,11 @@ def generate_fake_input(
             pkg_repos,
             condition_expr_fn=(lambda: use_package(pkg.into_z3())),
             gen_expr_fn=(lambda repo: use_repo_package(pkg.into_z3(), repo.into_z3())),
-            fmt=(lambda repo: ("UniqueRepoSourceConstraint(package={}|repo={})"
-                               .format(pkg, repo))),
+            fmt=(lambda repo: (
+                "use_package(p = {}) => ∃!r∈{{Repo}} s.t. use_repo_package(p, r). "
+                "case of: r = {}."
+                .format(pkg, repo)
+                .decode('utf-8').encode('utf-8'))),
         )
         assumptions.extend(unique_repo_assumptions)
 
@@ -733,7 +775,17 @@ def install_check(problems, timer=Timer(), solver=None):
     with timer.nested_phase('solve'):
         if solver is None:
             solver = Solver()
-        result = solver.check(problems)
+        try:
+            # NB: Providing the problems all at once is necessary to have `.unsat_core()` reflect
+            # them (this seems arbitrary).
+            result = solver.check(problems)
+        except Z3Exception:
+            # But, if one of the problems is malformed (e.g. a non-boolean expression), this will at
+            # least narrow down the issue.
+            for problem in problems:
+                print(problem)
+                solver.add(problem)
+            raise
         truths = []
         unsat_core = []
         if result == sat:
@@ -761,6 +813,7 @@ def ground_check(grounder, solver=None, timer=Timer(), with_conflict=False):
         grounds_maybe = list(grounder(solver_setup))
         print('grounds: {}'.format(grounds_maybe))
         all_exprs = assumptions + grounds_maybe
+        print('\n----\n'.join(str(e).decode('utf-8').encode('utf-8') for e in all_exprs))
         (s, result, truths, unsat_core) = install_check(all_exprs, timer=timer, solver=solver)
         if result == sat:
             print('TRUTHS:\n{}'.format('\n'.join(truths)))
@@ -782,30 +835,40 @@ def solve(timer=Timer(), interact=False):
     #                      Tactic('smt'),
     # )
 
+    def get_ground_exprs(version_solver_setup):
+        # type: (VersionSolverSetup) -> Iterable[Z3Expr]
+        a_1_5 = list(version_solver_setup.reverse_lookup_package_version(
+            PackageName('a'),
+            SpackVersion(parse_single_version('1.5.2')),
+        ))[0]
+        return [use_package(a_1_5.into_z3())]
+
     with timer.nested_phase('solve 1'):
-        s1, e1, m1, r1, tr1, u1, g1, ss1 = ground_check((lambda by_name: [by_name['a==1.5.2+[+debug=0]'][1]]),
-                                                            timer=timer,
-                                                            # solver=robust_tactic.solver(),
-                                                            with_conflict=False)
+        s1, e1, r1, tr1, u1, g1, ss1 = ground_check(
+            get_ground_exprs,
+            timer=timer,
+            # solver=robust_tactic.solver(),
+            with_conflict=False)
         with timer.nested_phase('check 1'):
             if not r1 == sat:
                 if interact:
                     print('ERROR: NOT SAT! SHOULD BE!')
-                    code.interact(local=locals())
+                    # code.interact(local=locals())
                 else:
                     assert r1 == sat, r1
 
     with timer.nested_phase('solve 2'):
-        s2, e2, m2, r2, tr2, u2, g2, ss2 = ground_check((lambda by_name: [by_name['a==1.5.2+[+debug=0]'][1]]),
-                                                            timer=timer,
-                                                            # solver=robust_tactic.solver(),
-                                                            with_conflict=True)
+        s2, e2, r2, tr2, u2, g2, ss2 = ground_check(
+            get_ground_exprs,
+            timer=timer,
+            # solver=robust_tactic.solver(),
+            with_conflict=True)
         with timer.nested_phase('check 2'):
             # TODO: make this correct!
             if not r2 == unsat:
                 if interact:
                     print('ERROR: NOT \'unsat\'! SHOULD  BE!')
-                    code.interact(local=locals())
+                    # code.interact(local=locals())
                 else:
                     assert r2 == unsat
 
