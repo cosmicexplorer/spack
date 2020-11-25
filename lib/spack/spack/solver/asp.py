@@ -2,7 +2,7 @@
 # Spack Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
-from __future__ import print_function
+from __future__ import absolute_import, print_function
 
 import collections
 import copy
@@ -22,6 +22,9 @@ import archspec.cpu
 try:
     import clingo
 except ImportError:
+    # print('path: {}'.format(sys.path))
+    # print('exe: {}'.format(sys.executable))
+    # raise
     clingo = None
 
 import llnl.util.lang
