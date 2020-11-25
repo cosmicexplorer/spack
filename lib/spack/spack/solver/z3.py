@@ -46,12 +46,6 @@ function applications.
 """
 Z3Expr = ExprRef
 
-def Iff(a, b):
-    return And([
-        Implies(a, b),
-        Implies(b, a),
-    ])
-
 
 RepoSort, repos = EnumSort('RepoSort', ['spack', 'pypi', 'sonatype'])
 (spack, pypi, sonatype) = repos
@@ -463,7 +457,7 @@ def build_assumptions(with_conflict=False):
                                           version=version_string,
                                           var=variant_description))
                     pkg_bool_var = Bool(var_string)
-                    assumptions.append(Iff(pkg_bool_var, use_package(pkg)))
+                    assumptions.append(use_package(pkg) == pkg_bool_var)
                     all_packages_by_name[var_string] = (pkg, pkg_bool_var)
                     pkg_mapping[pkg] = (name, version, pkg_bool_var, variant_value_map)
                     pkg_inverse_mapping[name][v_tup].append((pkg, variant_value_map))
