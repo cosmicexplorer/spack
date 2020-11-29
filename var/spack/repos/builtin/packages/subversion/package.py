@@ -28,6 +28,7 @@ class Subversion(AutotoolsPackage):
     variant('serf', default=True,  description='Serf HTTP client library')
     variant('perl', default=False, description='Build with Perl bindings')
 
+    depends_on('gettext')
     depends_on('apr')
     depends_on('apr-util')
     depends_on('zlib')
@@ -67,6 +68,13 @@ class Subversion(AutotoolsPackage):
             '--without-jdk',
             '--without-boost',
         ]
+
+        args.extend([
+            # This is necessary to avoid link errors against libintl on Linux.
+            'LDFLAGS={0}'.format(spec['gettext'].libs.ld_flags),
+            # TODO: Is this necessary to point it to the correct gettext version at runtime?
+            '--with-gettext={0}'.format(spec['gettext'].prefix),
+        ])
 
         if spec.satisfies('@1.10:'):
             args.extend([
