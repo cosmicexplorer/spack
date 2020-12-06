@@ -17,7 +17,7 @@ from llnl.util.filesystem import working_dir
 import spack.package
 import spack.spec
 from spack.util.executable import which
-from spack.version import Version, VersionList, VersionRange, ver
+from spack.version import Version, VersionEndpoint, VersionList, VersionRange, ver
 
 
 def assert_ver_lt(a, b):
@@ -265,6 +265,22 @@ def test_version_ranges():
 
     assert_ver_lt('1.2:1.4', '1.5:1.6')
     assert_ver_gt('1.5:1.6', '1.2:1.4')
+
+    assert_in('1.5', VersionRange.parse('1.5:1.6'))
+    assert_in('1.6', VersionRange.parse('1.5:1.6'))
+
+    assert VersionRange.parse('1.5:1.6') not in VersionRange.parse('1.5:!1.6')
+    assert VersionRange.parse('1.5:1.6') not in VersionRange.parse('1.5!:1.6')
+    assert VersionRange.parse('1.5:1.6') > VersionRange.parse('1.5:!1.6')
+    assert VersionRange.parse('1.5:1.6') < VersionRange.parse('1.5!:1.6')
+
+    assert_ver_lt(':1.6.5', '1.6')
+    assert_ver_gt('1.6', ':1.6.5')
+
+    assert_in('1.5', VersionRange.parse('1.5:!1.6'))
+    assert_not_in('1.6', VersionRange.parse('1.5:!1.6'))
+    assert_not_in('1.5', VersionRange.parse('1.5!:1.6'))
+    assert_in('1.6', VersionRange.parse('1.5!:1.6'))
 
 
 def test_contains():
@@ -520,7 +536,7 @@ def test_repr_and_str():
 
     def check_repr_and_str(vrs):
         a = Version(vrs)
-        assert repr(a) == "Version('" + vrs + "')"
+        assert repr(a) == "Version.parse('{0}')".format(vrs)
         b = eval(repr(a))
         assert a == b
         assert str(a) == vrs
@@ -546,17 +562,17 @@ def test_get_item():
     b = a[0:2]
     assert isinstance(b, Version)
     assert b == Version('0.1')
-    assert repr(b) == "Version('0.1')"
+    assert repr(b) == "Version.parse('0.1')"
     assert str(b) == '0.1'
     b = a[0:3]
     assert isinstance(b, Version)
     assert b == Version('0.1_2')
-    assert repr(b) == "Version('0.1_2')"
+    assert repr(b) == "Version.parse('0.1_2')"
     assert str(b) == '0.1_2'
     b = a[1:]
     assert isinstance(b, Version)
     assert b == Version('1_2-3')
-    assert repr(b) == "Version('1_2-3')"
+    assert repr(b) == "Version.parse('1_2-3')"
     assert str(b) == '1_2-3'
     # Raise TypeError on tuples
     with pytest.raises(TypeError):
@@ -639,6 +655,96 @@ def test_version_range_satisfies_means_nonempty_intersection():
     y = VersionRange('3.6.0', '3.6.0')
     assert not x.satisfies(y)
     assert not y.satisfies(x)
+
+
+def test_version_endpoints():
+    assert VersionEndpoint.left('2') < VersionEndpoint.left('2').negated()
+    assert VersionEndpoint.left('2').negated() > VersionEndpoint.left('2')
+
+    assert VersionEndpoint.right('2').negated() < VersionEndpoint.right('2')
+    assert VersionEndpoint.right('2') > VersionEndpoint.right('2').negated()
+
+    assert VersionEndpoint.right('2').negated() != VersionEndpoint.right('2')
+    assert VersionEndpoint.left('2').negated() != VersionEndpoint.left('2')
+
+    assert VersionEndpoint.left('2.1').negated() != VersionEndpoint.left('2.1')
+    assert VersionEndpoint.right('2.1').negated() != VersionEndpoint.right('2.1')
+
+    assert VersionEndpoint.left('2.1') in VersionEndpoint.left('2')
+    assert VersionEndpoint.left('2') not in VersionEndpoint.left('2.1')
+    assert VersionEndpoint.left('2.1') not in VersionEndpoint.left('2').negated()
+    assert VersionEndpoint.left('2').negated() not in VersionEndpoint.left('2.1')
+    # ---
+    assert VersionEndpoint.right('2.1') not in VersionEndpoint.right('2').negated()
+    assert VersionEndpoint.right('2').negated() not in VersionEndpoint.right('2.1')
+
+    assert VersionEndpoint.left('2') not in VersionEndpoint.left('2').negated()
+    assert VersionEndpoint.left('2') not in VersionEndpoint.left('3').negated()
+    assert VersionEndpoint.left('3') not in VersionEndpoint.left('2').negated()
+    assert VersionEndpoint.left('2') not in VersionEndpoint.left('3').negated()
+    # ---
+    assert VersionEndpoint.left('2').negated() not in VersionEndpoint.left('2')
+    assert VersionEndpoint.left('2').negated() not in VersionEndpoint.left('3')
+    assert VersionEndpoint.left('3').negated() not in VersionEndpoint.left('2')
+
+    assert VersionEndpoint.right('2') not in VersionEndpoint.right('2').negated()
+    assert VersionEndpoint.right('3') not in VersionEndpoint.right('2').negated()
+    assert VersionEndpoint.right('2') not in VersionEndpoint.right('3').negated()
+    # ---
+    assert VersionEndpoint.right('2').negated() not in VersionEndpoint.right('2')
+    assert VersionEndpoint.right('2').negated() not in VersionEndpoint.right('3')
+    assert VersionEndpoint.right('3').negated() not in VersionEndpoint.right('2')
+
+
+def test_strict_inequalities():
+    # (1) 2:!3
+    assert Version('2').satisfies(ver('2:!3'))
+    assert not Version('3').overlaps(ver('2:!3'))
+    assert not Version('3').satisfies(ver('2:!3'))
+    assert ver('2:!3').satisfies(Version('2'))
+    assert not ver('2:!3').satisfies(Version('3'))
+    assert not Version('2') < ver('2:!3')
+    assert not ver('2:!3') < Version('2')
+    assert Version('3') > ver('2:!3')
+
+    assert ver('2:!3') not in Version('2')
+    assert ver('2:!3') not in Version('3')
+    assert Version('3') not in ver('2:!3')
+    assert Version('2') in ver('2:!3')
+
+    # (2) 2!:3
+    assert not Version('2').overlaps(ver('2!:3'))
+    assert not Version('2').satisfies(Version('3'))
+    assert not Version('2') in Version('3')
+    assert not Version('3') in Version('2')
+    assert Version('2') < Version('3')
+    assert not Version('2').satisfies(ver('2!:3'))
+    assert Version('3').satisfies(ver('2!:3'))
+    assert not ver('2!:3').satisfies(Version('2'))
+    assert ver('2!:3').satisfies(Version('3'))
+    assert Version('2') < ver('2!:3')
+    assert Version('3') > ver('2!:3')
+
+    assert ver('2!:3') not in Version('2')
+    assert ver('2!:3') not in Version('3')
+    assert Version('3') in ver('2!:3')
+    assert Version('2') not in ver('2!:3')
+
+    # (3) 2!:!3
+    assert not Version('2').overlaps(ver('2!:!3'))
+    assert not Version('3').overlaps(ver('2!:!3'))
+    assert Version('2.1').overlaps(ver('2!:!3'))
+    assert not Version('2').satisfies(ver('2!:!3'))
+    assert not Version('3').satisfies(ver('2!:!3'))
+    assert not ver('2!:!3').satisfies(Version('2'))
+    assert not ver('2!:!3').satisfies(Version('3'))
+    assert Version('2') < ver('2!:!3')
+    assert Version('3') > ver('2!:!3')
+
+    assert ver('2!:!3') not in Version('2')
+    assert ver('2!:!3') not in Version('3')
+    assert Version('3') not in ver('2!:!3')
+    assert Version('2') not in ver('2!:!3')
 
 
 @pytest.mark.regression('26482')
