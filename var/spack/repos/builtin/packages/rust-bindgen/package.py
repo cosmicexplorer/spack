@@ -10,9 +10,10 @@ import os
 class RustBindgen(Package):
     """The rust programming language toolchain"""
     homepage = "http://www.rust-lang.org"
-    url = "https://github.com/servo/rust-bindgen/archive/v0.20.5.tar.gz"
+    url = "https://github.com/rust-lang/rust-bindgen/archive/v0.56.0.tar.gz"
 
     version('0.20.5', sha256='4f5236e7979d262c43267afba365612b1008b91b8f81d1efc6a8a2199d52bb37')
+    version('0.56.0', sha256='1bff9abe671cd99c74510f0121fb5a1c250a311dc518f9528507444001f6b929')
 
     extends("rust")
     depends_on("llvm")
