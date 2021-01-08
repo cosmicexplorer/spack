@@ -21,4 +21,9 @@ class RustBindgen(Package):
     def install(self, spec, prefix):
         env = dict(os.environ)
         env['LIBCLANG_PATH'] = os.path.join(spec['llvm'].prefix, 'lib')
-        cargo('install', '--root', prefix, env=env)
+        cargo = which('cargo')
+
+        # TODO: make a 'cargo' build system!
+        # assert 'cargo' in spec
+        # spec['cargo'].version for --path .!
+        cargo('install', '--path', '.', '--root', prefix, env=env)
