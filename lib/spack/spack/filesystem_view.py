@@ -10,6 +10,8 @@ import shutil
 import sys
 from ordereddict_backport import OrderedDict
 
+from compat import filter, map, zip
+
 from llnl.util.link_tree import LinkTree, MergeConflictError
 from llnl.util import tty
 from llnl.util.lang import match_predicate, index_by
@@ -30,12 +32,6 @@ from spack.error import SpackError
 from spack.directory_layout import ExtensionAlreadyInstalledError
 from spack.directory_layout import YamlViewExtensionsLayout
 
-
-# compatability
-if sys.version_info < (3, 0):
-    from itertools import imap as map
-    from itertools import ifilter as filter
-    from itertools import izip as zip
 
 __all__ = ["FilesystemView", "YamlFilesystemView"]
 

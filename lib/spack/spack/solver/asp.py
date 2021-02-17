@@ -13,6 +13,8 @@ import sys
 import time
 import types
 import warnings
+from compat import Sequence
+
 from six import string_types
 
 import archspec.cpu
@@ -43,12 +45,6 @@ import spack.repo
 import spack.bootstrap
 import spack.variant
 import spack.version
-
-
-if sys.version_info >= (3, 3):
-    from collections.abc import Sequence  # novm
-else:
-    from collections import Sequence
 
 
 class Timer(object):

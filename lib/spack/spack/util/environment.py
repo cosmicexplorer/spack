@@ -9,21 +9,21 @@ import contextlib
 import inspect
 import json
 import os
+import os.path
 import platform
 import re
 import socket
 import sys
-import os.path
 
 import six
-
-import llnl.util.tty as tty
-import spack.util.executable as executable
-
-from llnl.util.lang import dedupe
-
 from six.moves import shlex_quote as cmd_quote
 from six.moves import cPickle
+
+import llnl.util.tty as tty
+from llnl.util.lang import dedupe
+
+import spack.util.executable as executable
+import spack.util.spack_json as sjson
 
 system_paths = ['/', '/usr', '/usr/local']
 suffixes = ['bin', 'bin64', 'include', 'lib', 'lib64']
@@ -985,13 +985,7 @@ def environment_after_sourcing_files(*files, **kwargs):
 
         # If we're in python2, convert to str objects instead of unicode
         # like json gives us.  We can't put unicode in os.environ anyway.
-        if sys.version_info[0] < 3:
-            environment = dict(
-                (k.encode('utf-8'), v.encode('utf-8'))
-                for k, v in environment.items()
-            )
-
-        return environment
+        return sjson.encode_json_dict(environment)
 
     current_environment = kwargs.get('env', dict(os.environ))
     for f in files:
@@ -1032,7 +1026,7 @@ def sanitize(environment, blacklist, whitelist):
         return subset
 
     # Don't modify input, make a copy instead
-    environment = dict(environment)
+    environment = sjson.decode_json_dict(dict(environment))
 
     # Retain (whitelist) has priority over prune (blacklist)
     prune = set_intersection(set(environment), *blacklist)

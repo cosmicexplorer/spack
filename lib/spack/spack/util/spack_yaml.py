@@ -14,9 +14,9 @@
 """
 import ctypes
 import re
-import sys
 from typing import List  # novm
 
+from compat import Mapping
 from ordereddict_backport import OrderedDict
 from six import string_types, StringIO
 
@@ -26,12 +26,6 @@ from ruamel.yaml import RoundTripLoader, RoundTripDumper
 from llnl.util.tty.color import colorize, clen, cextra
 
 import spack.error
-
-
-if sys.version_info >= (3, 3):
-    from collections.abc import Mapping  # novm
-else:
-    from collections import Mapping
 
 
 # Only export load and dump

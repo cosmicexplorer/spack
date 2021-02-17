@@ -4,11 +4,10 @@
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 import os
 import hashlib
-import base64
-import sys
 
 import llnl.util.tty as tty
 
+import spack.util.py2 as compat
 import spack.util.spack_json as sjson
 import spack.util.file_permissions as fp
 import spack.store
@@ -18,12 +17,7 @@ import spack.filesystem_view
 def compute_hash(path):
     with open(path, 'rb') as f:
         sha1 = hashlib.sha1(f.read()).digest()
-        b32 = base64.b32encode(sha1)
-
-        if sys.version_info[0] >= 3:
-            b32 = b32.decode()
-
-        return b32
+        return compat.b32encode(sha1)
 
 
 def create_manifest_entry(path):
