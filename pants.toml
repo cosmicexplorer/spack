@@ -1,2 +1,9 @@
 [GLOBAL]
-pants_version = "2.2.0"
+pants_version = '2.2.0'
+
+backend_packages = [
+  'pants.backend.python',
+]
+
+[python-infer]
+inits = true

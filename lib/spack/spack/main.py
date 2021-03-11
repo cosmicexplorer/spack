@@ -21,6 +21,14 @@ import traceback
 import warnings
 from six import StringIO
 
+# Find spack's location and its prefix.
+spack_file = os.path.realpath(os.path.expanduser(__file__))
+spack_prefix = os.path.dirname(os.path.dirname(spack_file))
+
+# Add external libs
+spack_external_libs = os.path.join(spack_prefix, "external")
+sys.path.insert(0, spack_external_libs)
+
 import archspec.cpu
 import llnl.util.filesystem as fs
 import llnl.util.tty as tty
