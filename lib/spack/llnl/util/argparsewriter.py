@@ -6,9 +6,14 @@
 from __future__ import print_function
 
 import re
-import argparse
 import errno
 import sys
+from argparse import _SubParsersAction
+
+try:
+    import external.argparse as argparse
+except ImportError:
+    import argparse
 
 from six import StringIO
 
@@ -31,6 +36,11 @@ class Command(object):
     """
     def __init__(self, prog, description, usage,
                  positionals, optionals, subcommands):
+        if not prog.startswith('spack'):
+            new_prog = re.sub(r'^[^\s]+\s*', 'spack ', prog).strip()
+            # tty.warn('argv[0] was not "spack" -- was {0}. correcting to {1}!'
+            #          .format(prog, new_prog))
+            prog = new_prog
         self.prog = prog
         self.description = description
         self.usage = usage
@@ -55,6 +65,11 @@ class ArgparseWriter(argparse.HelpFormatter):
         """
         super(ArgparseWriter, self).__init__(prog)
         self.level = 0
+        if not prog.startswith('spack'):
+            new_prog = re.sub(r'^[^\s]+\s*', 'spack ', prog).strip()
+            # tty.warn('argv[0] was not "spack" -- was {0}. correcting to {1}!'
+            #          .format(prog, new_prog))
+            prog = new_prog
         self.prog = prog
         self.out = sys.stdout if out is None else out
         self.aliases = aliases
@@ -93,7 +108,7 @@ class ArgparseWriter(argparse.HelpFormatter):
                 help = self._expand_help(action) if action.help else ''
                 help = help.replace('\n', ' ')
                 optionals.append((flags, dest_flags, help))
-            elif isinstance(action, argparse._SubParsersAction):
+            elif isinstance(action, _SubParsersAction):
                 for subaction in action._choices_actions:
                     subparser = action._name_parser_map[subaction.dest]
                     subcommands.append((subparser, subaction.dest))

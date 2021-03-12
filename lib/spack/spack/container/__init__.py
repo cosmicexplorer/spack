@@ -5,6 +5,8 @@
 """Package that provides functions and classes to
 generate container recipes from a Spack environment
 """
+
+import pkgutil
 import warnings
 
 import spack.environment
@@ -12,7 +14,7 @@ import spack.schema.env as env
 import spack.util.spack_yaml as syaml
 from .writers import recipe
 
-__all__ = ['validate', 'recipe']
+__all__ = ['validate', 'recipe', 'image_data']
 
 
 def validate(configuration_file):
@@ -79,3 +81,8 @@ def validate(configuration_file):
 
     jsonschema.validate(config, schema=env.schema)
     return config
+
+
+def image_data():
+    # type: () -> str
+    return pkgutil.get_data('spack.container', 'images.json').decode('utf-8')

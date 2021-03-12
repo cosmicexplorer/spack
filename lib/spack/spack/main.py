@@ -165,6 +165,14 @@ def index_commands():
 
 
 class SpackHelpFormatter(argparse.RawTextHelpFormatter):
+    def __init__(self, prog, *args, **kwargs):
+        if not prog.startswith('spack'):
+            new_prog = re.sub(r'^[^\s]+\s*', 'spack ', prog).strip()
+            # tty.warn('argv[0] was not "spack" -- was {0}. correcting to {1}!'
+            #          .format(prog, new_prog))
+            prog = new_prog
+        super(SpackHelpFormatter, self).__init__(prog, *args, **kwargs)
+
     def _format_actions_usage(self, actions, groups):
         """Formatter with more concise usage strings."""
         usage = super(
@@ -174,6 +182,8 @@ class SpackHelpFormatter(argparse.RawTextHelpFormatter):
         # at the beginning of the usage string
         chars = ''.join(re.findall(r'\[-(.)\]', usage))
         usage = re.sub(r'\[-.\] ?', '', usage)
+        # Remove trailing whitespace and extra whitespace between options.
+        usage = re.sub(r'\]\s+\[', '] [', usage.strip())
         if chars:
             return '[-%s] %s' % (chars, usage)
         else:
@@ -181,6 +191,14 @@ class SpackHelpFormatter(argparse.RawTextHelpFormatter):
 
 
 class SpackArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        super(SpackArgumentParser, self).__init__(*args, **kwargs)
+        if not self.prog.startswith('spack'):
+            new_prog = re.sub(r'^[^\s]+\s*', 'spack ', self.prog).strip()
+            # tty.warn('argv[0] was not "spack" -- was {0}. correcting to {1}!'
+            #          .format(prog, new_prog))
+            self.prog = new_prog
+
     def format_help_sections(self, level):
         """Format help on sections for a particular verbosity level.
 

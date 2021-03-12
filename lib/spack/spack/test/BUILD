@@ -10,8 +10,9 @@ target(
         'lib/spack/external/jsonschema:json',
         'lib/spack/llnl',
         'lib/spack/spack',
+        'lib/spack/spack/container',
         'lib/spack/spack/test/data',
-        'share/spack/templates',
+        'share/spack',
         'var/spack/repos/builtin.mock',
         'var/spack/repos/builtin:repo-config',
         'var/spack/repos/builtin/packages/libelf',
@@ -23,7 +24,9 @@ target(
 python_tests(
     sources=[
         '**/*.py',
+        '!**/__init__.py',
         '!bindist.py',
+        '!build_distribution.py',
         '!concretize.py',
         '!database.py',
         '!directory_layout.py',
@@ -39,6 +42,8 @@ python_tests(
         '!test_suite.py',
         '!url_fetch.py',
         '!cmd/',
+        '!util/',
+        '!llnl/util/tty',
     ],
     dependencies=[
         ':basic-test-deps',
@@ -49,6 +54,7 @@ python_tests(
     name='long-running',
     sources=[
         'bindist.py',
+        'build_distribution.py',
         'concretize.py',
         'git_fetch.py',
         'install.py',
@@ -175,13 +181,9 @@ python_tests(
     ],
 )
 
-python_tests(
-    name='needs-git-hdf5-flake8',
-    sources=['spec_semantics.py'],
+target(
+    name='mpi-deps',
     dependencies=[
-        ':basic-test-deps',
-        ':mpileaks-deps',
-        ':python-deps',
         'var/spack/repos/builtin/packages/cray-mpich',
         'var/spack/repos/builtin/packages/curl',
         'var/spack/repos/builtin/packages/fujitsu-mpi',
@@ -211,6 +213,22 @@ python_tests(
         'var/spack/repos/builtin/packages/py-pyflakes',
         'var/spack/repos/builtin/packages/py-setuptools',
         'var/spack/repos/builtin/packages/spectrum-mpi',
+    ],
+)
+
+python_library(
+    name='spec-semantics',
+    sources=['spec_semantics.py'],
+)
+
+python_tests(
+    name='needs-mpi-deps',
+    sources=['spec_semantics.py'],
+    dependencies=[
+        ':basic-test-deps',
+        ':mpileaks-deps',
+        ':python-deps',
+        ':mpi-deps',
     ]
 )
 

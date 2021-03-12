@@ -8,6 +8,9 @@ import pytest
 import os
 import os.path
 
+import spack.pkgkit
+import spack.compiler
+import spack.compilers.apple_clang
 import spack.main
 import spack.spec
 import spack.binary_distribution

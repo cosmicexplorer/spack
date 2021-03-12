@@ -6,6 +6,8 @@
 import json
 import os.path
 
+import spack.container
+
 #: Global variable used to cache in memory the content of images.json
 _data = None
 
@@ -18,10 +20,7 @@ def data():
     """
     global _data
     if not _data:
-        json_dir = os.path.abspath(os.path.dirname(__file__))
-        json_file = os.path.join(json_dir, 'images.json')
-        with open(json_file) as f:
-            _data = json.load(f)
+        _data = json.loads(spack.container.image_data())
     return _data
 
 

@@ -82,6 +82,11 @@ class SpackArgparseRstWriter(ArgparseRstWriter):
                  documented_commands=[],
                  rst_levels=['-', '-', '^', '~', ':', '`']):
         out = sys.stdout if out is None else out
+        if not prog.startswith('spack'):
+            new_prog = re.sub(r'^[^\s]+\s*', 'spack ', prog).strip()
+            # tty.warn('argv[0] was not "spack" -- was {0}. correcting to {1}!'
+            #          .format(prog, new_prog))
+            prog = new_prog
         super(SpackArgparseRstWriter, self).__init__(
             prog, out, aliases, rst_levels)
         self.documented = documented_commands
@@ -97,6 +102,14 @@ class SpackArgparseRstWriter(ArgparseRstWriter):
 
 
 class SubcommandWriter(ArgparseWriter):
+    def __init__(self, prog, *args, **kwargs):
+        if not prog.startswith('spack'):
+            new_prog = re.sub(r'^[^\s]+\s*', 'spack ', prog).strip()
+            # tty.warn('argv[0] was not "spack" -- was {0}. correcting to {1}!'
+            #          .format(prog, new_prog))
+            prog = new_prog
+        super(SubcommandWriter, self).__init__(prog, *args, **kwargs)
+
     def format(self, cmd):
         return '    ' * self.level + cmd.prog + '\n'
 
@@ -122,6 +135,14 @@ _positional_to_subroutine = {
 
 class BashCompletionWriter(ArgparseCompletionWriter):
     """Write argparse output as bash programmable tab completion."""
+
+    def __init__(self, prog, *args, **kwargs):
+        if not prog.startswith('spack'):
+            new_prog = re.sub(r'^[^\s]+\s*', 'spack ', prog).strip()
+            # tty.warn('argv[0] was not "spack" -- was {0}. correcting to {1}!'
+            #          .format(prog, new_prog))
+            prog = new_prog
+        super(BashCompletionWriter, self).__init__(prog, *args, **kwargs)
 
     def body(self, positionals, optionals, subcommands):
         if positionals:

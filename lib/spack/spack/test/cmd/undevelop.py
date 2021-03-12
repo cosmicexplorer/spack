@@ -3,6 +3,9 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import spack.compiler
+import spack.compilers.apple_clang
+import spack.pkgkit
 import spack.spec
 import spack.environment as ev
 from spack.main import SpackCommand

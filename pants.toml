@@ -11,6 +11,7 @@ pants_ignore = [
   '!.git',
   '!.git/**',
 ]
+files_not_found_behavior = 'warn'
 
 [python-infer]
 inits = true
