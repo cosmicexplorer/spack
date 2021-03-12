@@ -1,3 +1,3 @@
 python_library(
-    sources=['**/*.py'],
+    sources=['**/*.py', '!archspec/', '!jsonschema/', '!jinja2/'],
 )

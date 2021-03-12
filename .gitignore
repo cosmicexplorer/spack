@@ -519,3 +519,5 @@ $RECYCLE.BIN/
 /dist/
 /.pids
 /.pants.workdir.file_lock*
+!**/BUILD
+!/lib/spack/env/

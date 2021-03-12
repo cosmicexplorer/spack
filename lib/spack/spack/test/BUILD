@@ -1,6 +1,236 @@
-python_tests(
-    sources=['**/*.py'],
+target(
+    name='basic-test-deps',
     dependencies=[
+        'bin:spack-cli-files',
+        'etc/spack',
+        'lib/spack/env',
+        'lib/spack/external',
+        'lib/spack/external/jinja2',
+        'lib/spack/external/archspec',
+        'lib/spack/external/jsonschema:json',
+        'lib/spack/llnl',
         'lib/spack/spack',
+        'lib/spack/spack/test/data',
+        'share/spack/templates',
+        'var/spack/repos/builtin.mock',
+        'var/spack/repos/builtin:repo-config',
+        'var/spack/repos/builtin/packages/libelf',
+        'var/spack/gpg.mock',
+    ],
+)
+
+
+python_tests(
+    sources=[
+        '**/*.py',
+        '!bindist.py',
+        '!concretize.py',
+        '!database.py',
+        '!directory_layout.py',
+        '!git_fetch.py',
+        '!install.py',
+        '!main.py',
+        '!package_sanity.py',
+        '!patch.py',
+        '!spec_semantics.py',
+        '!spec_list.py',
+        '!stage.py',
+        '!test_activations.py',
+        '!test_suite.py',
+        '!url_fetch.py',
+        '!cmd/',
+    ],
+    dependencies=[
+        ':basic-test-deps',
+    ],
+)
+
+python_tests(
+    name='long-running',
+    sources=[
+        'bindist.py',
+        'concretize.py',
+        'git_fetch.py',
+        'install.py',
+        'url_fetch.py',
+    ],
+    dependencies=[
+        ':basic-test-deps',
+    ],
+    tags = {'long-running'},
+)
+
+target(
+    name='mpileaks-deps',
+    dependencies=[
+        'var/spack/repos/builtin/packages/adept-utils',
+        'var/spack/repos/builtin/packages/autoconf',
+        'var/spack/repos/builtin/packages/automake',
+        'var/spack/repos/builtin/packages/boost',
+        'var/spack/repos/builtin/packages/bzip2',
+        'var/spack/repos/builtin/packages/callpath',
+        'var/spack/repos/builtin/packages/cmake',
+        'var/spack/repos/builtin/packages/dyninst',
+        'var/spack/repos/builtin/packages/elfutils',
+        'var/spack/repos/builtin/packages/findutils',
+        'var/spack/repos/builtin/packages/gettext',
+        'var/spack/repos/builtin/packages/hwloc',
+        'var/spack/repos/builtin/packages/intel-tbb',
+        'var/spack/repos/builtin/packages/libdwarf',
+        'var/spack/repos/builtin/packages/libfabric',
+        'var/spack/repos/builtin/packages/libiberty',
+        'var/spack/repos/builtin/packages/libiconv',
+        'var/spack/repos/builtin/packages/libtool',
+        'var/spack/repos/builtin/packages/libxml2',
+        'var/spack/repos/builtin/packages/m4',
+        'var/spack/repos/builtin/packages/mpich',
+        'var/spack/repos/builtin/packages/mpileaks',
+        'var/spack/repos/builtin/packages/ncurses',
+        'var/spack/repos/builtin/packages/openssl',
+        'var/spack/repos/builtin/packages/pkg-config',
+        'var/spack/repos/builtin/packages/tar',
+        'var/spack/repos/builtin/packages/texinfo',
+        'var/spack/repos/builtin/packages/xz',
+        'var/spack/repos/builtin/packages/zlib',
+    ],
+)
+
+python_tests(
+    name='needs-mock-store',
+    sources=['database.py'],
+    dependencies=[
+        ':basic-test-deps',
+        ':mpileaks-deps',
+    ],
+    tags = {'long-running'},
+)
+
+target(
+    name='python-deps',
+    dependencies=[
+        'var/spack/repos/builtin/packages/apple-libuuid',
+        'var/spack/repos/builtin/packages/berkeley-db',
+        'var/spack/repos/builtin/packages/bzip2',
+        'var/spack/repos/builtin/packages/diffutils',
+        'var/spack/repos/builtin/packages/expat',
+        'var/spack/repos/builtin/packages/gdbm',
+        'var/spack/repos/builtin/packages/gettext',
+        'var/spack/repos/builtin/packages/libc',
+        'var/spack/repos/builtin/packages/libffi',
+        'var/spack/repos/builtin/packages/libiconv',
+        'var/spack/repos/builtin/packages/libxml2',
+        'var/spack/repos/builtin/packages/libuuid',
+        'var/spack/repos/builtin/packages/ncurses',
+        'var/spack/repos/builtin/packages/openssl',
+        'var/spack/repos/builtin/packages/ossp-uuid',
+        'var/spack/repos/builtin/packages/perl',
+        'var/spack/repos/builtin/packages/pkgconf',
+        'var/spack/repos/builtin/packages/pkg-config',
+        'var/spack/repos/builtin/packages/python',
+        'var/spack/repos/builtin/packages/readline',
+        'var/spack/repos/builtin/packages/sqlite',
+        'var/spack/repos/builtin/packages/tar',
+        'var/spack/repos/builtin/packages/util-linux-uuid',
+        'var/spack/repos/builtin/packages/xz',
+        'var/spack/repos/builtin/packages/zlib',
+    ],
+)
+
+python_tests(
+    name='needs-python',
+    sources=['directory_layout.py', 'test_activations.py'],
+    dependencies=[
+        ':basic-test-deps',
+        ':python-deps',
+    ],
+)
+
+python_tests(
+    name='needs-some-git-info',
+    sources=['main.py'],
+    dependencies=[
+        ':basic-test-deps',
+        '//:git-files',
+    ],
+)
+
+python_tests(
+    name='needs-full-git-repo',
+    sources=['package_sanity.py', 'stage.py'],
+    dependencies=[
+        ':basic-test-deps',
+    ],
+    # TODO: Use --local-execution-root-dir to do this safely! Create a temp dir, make
+    # a symbolic link to the spack .git dir, then use the temp dir as the execution
+    # root dir!
+    tags = {'needs-full-git-repo'},
+)
+
+python_tests(
+    name='needs-patch',
+    sources=['patch.py'],
+    dependencies=[
+        ':basic-test-deps',
+        'var/spack/repos/builtin/packages/patch',
+    ],
+)
+
+python_tests(
+    name='needs-git-hdf5-flake8',
+    sources=['spec_semantics.py'],
+    dependencies=[
+        ':basic-test-deps',
+        ':mpileaks-deps',
+        ':python-deps',
+        'var/spack/repos/builtin/packages/cray-mpich',
+        'var/spack/repos/builtin/packages/curl',
+        'var/spack/repos/builtin/packages/fujitsu-mpi',
+        'var/spack/repos/builtin/packages/git',
+        'var/spack/repos/builtin/packages/hdf5',
+        'var/spack/repos/builtin/packages/intel-mpi',
+        'var/spack/repos/builtin/packages/intel-oneapi-mpi',
+        'var/spack/repos/builtin/packages/intel-parallel-studio',
+        'var/spack/repos/builtin/packages/libedit',
+        'var/spack/repos/builtin/packages/libevent',
+        'var/spack/repos/builtin/packages/libidn2',
+        'var/spack/repos/builtin/packages/libunistring',
+        'var/spack/repos/builtin/packages/libsigsegv',
+        'var/spack/repos/builtin/packages/mvapich2',
+        'var/spack/repos/builtin/packages/mvapich2x',
+        'var/spack/repos/builtin/packages/mvapich2-gdr',
+        'var/spack/repos/builtin/packages/mpilander',
+        'var/spack/repos/builtin/packages/mpt',
+        'var/spack/repos/builtin/packages/nvhpc',
+        'var/spack/repos/builtin/packages/openmpi',
+        'var/spack/repos/builtin/packages/openssh',
+        'var/spack/repos/builtin/packages/pcre2',
+        'var/spack/repos/builtin/packages/py-entrypoints',
+        'var/spack/repos/builtin/packages/py-flake8',
+        'var/spack/repos/builtin/packages/py-mccabe',
+        'var/spack/repos/builtin/packages/py-pycodestyle',
+        'var/spack/repos/builtin/packages/py-pyflakes',
+        'var/spack/repos/builtin/packages/py-setuptools',
+        'var/spack/repos/builtin/packages/spectrum-mpi',
+    ]
+)
+
+python_tests(
+    name='needs-zlib',
+    sources=['spec_list.py'],
+    dependencies=[
+        ':basic-test-deps',
+        'var/spack/repos/builtin/packages/hypre',
+        'var/spack/repos/builtin/packages/zlib',
+    ]
+)
+
+python_tests(
+    name='needs-mpileaks-python',
+    sources=['test_suite.py'],
+    dependencies=[
+        ':basic-test-deps',
+        ':mpileaks-deps',
+        ':python-deps',
+        'var/spack/repos/builtin/packages/libsigsegv',
     ],
 )

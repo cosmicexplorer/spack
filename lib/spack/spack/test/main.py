@@ -23,7 +23,7 @@ echo v0.13.3
     assert spack.spack_version == get_version()
 
 
-def test_get_version_match_git(tmpdir, working_env):
+def test_get_version_match_git(tmpdir, working_env, monkeypatch):
     git = str(tmpdir.join("git"))
     with open(git, "w") as f:
         f.write("""#!/bin/sh

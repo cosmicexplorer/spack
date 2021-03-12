@@ -1,9 +1,20 @@
 [GLOBAL]
 pants_version = '2.2.0'
+pantsd = true
 
 backend_packages = [
   'pants.backend.python',
 ]
 
+pants_ignore_use_gitignore = true
+pants_ignore = [
+  '!.git',
+  '!.git/**',
+]
+
 [python-infer]
 inits = true
+imports = false
+
+[source]
+marker_filenames = ['SOURCE_ROOT']

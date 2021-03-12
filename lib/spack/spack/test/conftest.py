@@ -18,21 +18,7 @@ import xml.etree.ElementTree
 import py
 import pytest
 
-# Find spack's location and its prefix.
-spack_file = os.path.realpath(os.path.expanduser(__file__))
-spack_prefix = os.path.dirname(os.path.dirname(os.path.dirname(spack_file)))
-
-# Add all spack libs
-# spack_libs = os.path.join(spack_prefix, "spack")
-sys.path.insert(0, spack_prefix)
-
-# # Add external libs
-# external_libs = os.path.join(spack_prefix, "external")
-# sys.path.insert(0, external_libs)
-
-# # Add llnl libs
-# llnl_libs = os.path.join(spack_prefix, "llnl")
-# sys.path.insert(0, llnl_libs)
+import jinja2
 
 import archspec.cpu.microarchitecture
 import archspec.cpu.schema
@@ -43,6 +29,7 @@ import spack.compilers
 import spack.config
 import spack.caches
 import spack.database
+import spack.main
 import spack.directory_layout
 import spack.environment as ev
 import spack.package

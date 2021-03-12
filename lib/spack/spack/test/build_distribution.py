@@ -8,6 +8,7 @@ import pytest
 import os
 import os.path
 
+import spack.main
 import spack.spec
 import spack.binary_distribution
 

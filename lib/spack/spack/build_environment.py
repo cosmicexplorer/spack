@@ -51,7 +51,6 @@ from llnl.util.tty.log import MultiProcessFd
 import spack.build_systems.cmake
 import spack.build_systems.meson
 import spack.config
-import spack.main
 import spack.paths
 import spack.package
 import spack.repo
@@ -389,6 +388,24 @@ def set_build_environment_variables(pkg, env, dirty):
     # Add dependencies to CMAKE_PREFIX_PATH
     env.set_path('CMAKE_PREFIX_PATH', build_link_prefixes)
 
+    # Find spack's location and its prefix.
+    spack_file = os.path.realpath(os.path.expanduser(__file__))
+    spack_prefix = os.path.dirname(spack_file)
+
+    # Add all spack libs
+    spack_libs = os.path.join(spack_prefix, "spack")
+    sys.path.insert(0, spack_libs)
+
+    # Add external libs
+    external_libs = os.path.join(spack_prefix, "external")
+    sys.path.insert(0, external_libs)
+
+    # Add llnl libs
+    llnl_libs = os.path.join(spack_prefix, "llnl")
+    sys.path.insert(0, llnl_libs)
+
+    import spack.schema.environment
+
     # Set environment variables if specified for
     # the given compiler
     compiler = pkg.compiler
@@ -416,6 +433,7 @@ def set_build_environment_variables(pkg, env, dirty):
     # handled by putting one in the <build_env_path>/case-insensitive
     # directory.  Add that to the path too.
     env_paths = []
+    import spack.paths
     compiler_specific = os.path.join(
         spack.paths.build_env_path, os.path.dirname(pkg.compiler.link_paths['cc']))
     for item in [spack.paths.build_env_path, compiler_specific]:
@@ -429,10 +447,12 @@ def set_build_environment_variables(pkg, env, dirty):
     env.set_path(SPACK_ENV_PATH, env_paths)
 
     # Working directory for the spack command itself, for debug logs.
+    import spack.config
     if spack.config.get('config:debug'):
         env.set(SPACK_DEBUG, 'TRUE')
     env.set(SPACK_SHORT_SPEC, pkg.spec.short_spec)
     env.set(SPACK_DEBUG_LOG_ID, pkg.spec.format('{name}-{hash:7}'))
+    import spack.main
     env.set(SPACK_DEBUG_LOG_DIR, spack.main.spack_working_dir)
 
     # Find ccache binary and hand it to build environment
@@ -853,6 +873,7 @@ def _setup_pkg_and_run(serialized_pkg, function, kwargs, child_pipe,
             kwargs['unmodified_env'] = os.environ.copy()
             setup_package(pkg, dirty=kwargs.get('dirty', False),
                           context=context)
+
         return_value = function(pkg, kwargs)
         child_pipe.send(return_value)
 
