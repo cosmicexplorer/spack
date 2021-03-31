@@ -678,9 +678,7 @@ retrieved during package installations to avoid re-downloading in the case that
 a package is installed with a different specification (but the same version) or
 reinstalled on account of a change in the hashing scheme. It may (rarely) be
 necessary to avoid caching for a particular version by adding ``no_cache=True``
-as an option to the ``version()`` directive. Example situations would be a
-"snapshot"-like Version Control System (VCS) tag, a VCS branch such as
-``v6-16-00-patches``, or a URL specifying a regularly updated snapshot tarball.
+as an option to the ``version()`` directive. An example use case would be a URL specifying a regularly-updated snapshot tarball.
 
 ^^^^^^^^^^^^^^^^^^
 Version comparison
@@ -989,8 +987,12 @@ Git fetching supports the following parameters to ``version``:
 * ``git``: URL of the git repository, if different than the class-level ``git``.
 * ``branch``: Name of a branch to fetch.
 * ``tag``: Name of a tag to fetch.
-* ``commit``: SHA hash (or prefix) of a commit to fetch.
-* ``submodules``: Also fetch submodules recursively when checking out this repository.
+* ``commit``: SHA hash (or prefix) of a commit to fetch. This must be a 7-40 character
+  hexadecimal string. 7 characters is the size printed out by ``git
+  log --format='%h'``, while 40 hex characters is the size printed out by ``git
+  log --format='%H'``.
+* ``submodules``: Also fetch submodules recursively when checking out this
+  repository. This must be a ``bool`` or ``None``.
 * ``submodules_delete``: A list of submodules to forcibly delete from the repository
   after fetching. Useful if a version in the repository has submodules that
   have disappeared/are no longer accessible.
@@ -998,7 +1000,7 @@ Git fetching supports the following parameters to ``version``:
   branch information. Normally (``get_full_repo=False``, the default), the git
   option ``--depth 1`` will be used if the version of git and the specified
   transport protocol support it, and ``--single-branch`` will be used if the
-  version of git supports it.
+  version of git supports it. This must be a ``bool`` or ``None``.
 
 Only one of ``tag``, ``branch``, or ``commit`` can be used at a time.
 

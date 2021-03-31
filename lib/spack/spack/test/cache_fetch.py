@@ -10,11 +10,24 @@ import pytest
 
 from llnl.util.filesystem import mkdirp, touch
 
+import spack.caches
 import spack.config
+import spack.paths
 from spack.fetch_strategy import CacheURLFetchStrategy, NoCacheError
 from spack.stage import Stage
 
 is_windows = sys.platform == 'win32'
+
+
+def test_fetch_cache_location_override():
+    with spack.config.override('config:source_cache', ''):
+        assert spack.caches.fetch_cache_location() == spack.paths.user_repos_cache_path
+
+    abs_pref = '' if is_windows else '/'
+    source_cache = os.path.join(abs_pref, 'source-cache', 'subdir', '..', 'subdir2')
+    source_cache_canon = os.path.join(abs_pref, 'source-cache', 'subdir2')
+    with spack.config.override('config:source_cache', source_cache):
+        assert spack.caches.fetch_cache_location() == source_cache_canon
 
 
 @pytest.mark.parametrize('_fetch_method', ['curl', 'urllib'])
