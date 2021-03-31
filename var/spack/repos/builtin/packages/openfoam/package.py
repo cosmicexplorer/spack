@@ -263,8 +263,8 @@ class Openfoam(Package):
     list_url = "https://sourceforge.net/projects/openfoam/files/"
     list_depth = 2
 
-    version('develop', branch='develop', submodules='True')
-    version('master', branch='master', submodules='True')
+    version('develop', submodules=True)
+    version('master', submodules=True)
     version('2106', sha256='11e41e5b9a253ef592a8f6b79f6aded623b28308192d02cec1327078523b5a37')
     version('2012_210414', sha256='5260aaa79f91aad58a3a305c1a12d0d48b10f12e37cd99a6fa561969b15ea09d')
     version('2012', sha256='3d6e39e39e7ae61d321fbc6db6c3748e6e5e1c4886454207a7f1a7321469e65a')

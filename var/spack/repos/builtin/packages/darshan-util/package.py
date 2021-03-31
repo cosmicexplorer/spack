@@ -18,7 +18,7 @@ class DarshanUtil(Package):
 
     maintainers = ['shanedsnyder', 'carns']
 
-    version('main', branch='main', submodules='True')
+    version('main', submodules=True)
     version('3.3.1', sha256='281d871335977d0592a49d053df93d68ce1840f6fdec27fea7a59586a84395f7')
     version('3.3.0', sha256='2e8bccf28acfa9f9394f2084ec18122c66e45d966087fa2e533928e824fcb57a')
     version('3.3.0-pre2', sha256='0fc09f86f935132b7b05df981b05cdb3796a1ea02c7acd1905323691df65e761')

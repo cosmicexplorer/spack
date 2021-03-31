@@ -14,7 +14,7 @@ class Chai(CMakePackage, CudaPackage, ROCmPackage):
     homepage = "https://github.com/LLNL/CHAI"
     git      = "https://github.com/LLNL/CHAI.git"
 
-    version('develop', branch='develop', submodules=True)
+    version('develop', submodules=True)
     version('master', branch='main', submodules=True)
     version('2.3.0', tag='v2.3.0', submodules=True)
     version('2.2.2', tag='v2.2.2', submodules=True)
