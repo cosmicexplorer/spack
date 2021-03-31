@@ -33,6 +33,7 @@ import spack.config
 import spack.database
 import spack.directory_layout
 import spack.environment as ev
+import spack.fetch_strategy as fs
 import spack.package
 import spack.package_prefs
 import spack.paths
@@ -390,9 +391,12 @@ def check_for_leftover_stage_files(request, mock_stage, ignore_stage_files):
         assert not files_in_stage
 
 
-class MockCache(object):
-    def store(self, copy_cmd, relative_dest):
-        pass
+class MockCache(fs.FsCache):
+    def __init__(self, root):
+        self.root = root
+
+    def persistent_cache_dir_for(self, fetcher):
+        return os.path.join(self.root, fetcher.url_attr)
 
     def fetcher(self, target_path, digest, **kwargs):
         return MockCacheFetcher()
@@ -407,11 +411,12 @@ class MockCacheFetcher(object):
 
 
 @pytest.fixture(autouse=True)
-def mock_fetch_cache(monkeypatch):
+def mock_fetch_cache(monkeypatch, tmpdir_factory):
     """Substitutes spack.paths.fetch_cache with a mock object that does nothing
     and raises on fetch.
     """
-    monkeypatch.setattr(spack.caches, 'fetch_cache', MockCache())
+    root = tmpdir_factory.mktemp('cache_root')
+    monkeypatch.setattr(spack.caches, 'fetch_cache', MockCache(str(root)))
 
 
 @pytest.fixture()
@@ -1257,13 +1262,16 @@ def mock_git_repository(tmpdir_factory):
         git('add', tag_file)
         git('-c', 'commit.gpgsign=false', 'commit', '-m' 'tag test branch')
 
+        rev_hash = lambda x: git('rev-parse', x, output=str).strip()
+
         tag = 'test-tag'
         git('tag', tag)
+        tag_hash = rev_hash('refs/tags/{}'.format(tag))
 
         git('checkout', 'master')
+        branch_hash = rev_hash('refs/heads/{}'.format(branch))
 
         # R1 test is the same as test for branch
-        rev_hash = lambda x: git('rev-parse', x, output=str).strip()
         r1 = rev_hash(branch)
         r1_file = branch_file
 
@@ -1272,7 +1280,7 @@ def mock_git_repository(tmpdir_factory):
             revision='master', file=r0_file, args={'git': url}
         ),
         'branch': Bunch(
-            revision=branch, file=branch_file, args={
+            revision=branch, hash=branch_hash, file=branch_file, args={
                 'git': url, 'branch': branch
             }
         ),
@@ -1282,7 +1290,7 @@ def mock_git_repository(tmpdir_factory):
             }
         ),
         'tag': Bunch(
-            revision=tag, file=tag_file, args={'git': url, 'tag': tag}
+            revision=tag, hash=tag_hash, file=tag_file, args={'git': url, 'tag': tag}
         ),
         'commit': Bunch(
             revision=r1, file=r1_file, args={'git': url, 'commit': r1}
@@ -1546,3 +1554,21 @@ def brand_new_binary_cache():
     yield
     spack.binary_distribution.binary_index = llnl.util.lang.Singleton(
         spack.binary_distribution._binary_index)
+
+
+@pytest.fixture(scope='function')
+def patch_from_version_directive_for_git_ref(monkeypatch):
+    """Ensure the git fetch strategy resolves the desired reference."""
+
+    def from_ref(ref):
+        assert isinstance(ref, fs.GitRef), ref
+
+        def from_version_directive(*args, **kwargs):
+            return ref
+        # py2 complains unless you bind the .from_version_directive() classmethod to
+        # the class.
+        from_version_directive = from_version_directive.__get__(fs.GitRef,
+                                                                fs.GitRef.__class__)
+        monkeypatch.setattr(fs.GitRef, 'from_version_directive', from_version_directive)
+
+    return from_ref

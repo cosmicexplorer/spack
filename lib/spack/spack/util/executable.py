@@ -212,6 +212,7 @@ class Executable(object):
                     if error is str.split:
                         sys.stderr.write(errstr)
 
+            # FIXME: thread-safe way to check return code!
             rc = self.returncode = proc.returncode
             if fail_on_error and rc != 0 and (rc not in ignore_errors):
                 long_msg = cmd_line_string
