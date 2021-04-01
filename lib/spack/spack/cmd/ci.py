@@ -55,9 +55,6 @@ def setup_parser(subparser):
         '--dependencies', action='store_true', default=False,
         help="(Experimental) disable DAG scheduling; use "
              ' "plain" dependencies.')
-    generate.add_argument(
-        '--check-index-only', action='store_true', default=False,
-        help='(Deprecated) <has no effect>')
     prune_group = generate.add_mutually_exclusive_group()
     prune_group.add_argument(
         '--prune-dag', action='store_true', dest='prune_dag',
@@ -67,6 +64,17 @@ date on the mirror""")
         '--no-prune-dag', action='store_false', dest='prune_dag',
         default=True, help="""Generate jobs for specs already up to date
 on the mirror""")
+    generate.add_argument(
+        '--check-index-only', action='store_true', dest='index_only',
+        default=False, help="""Spack always check specs against configured
+binary mirrors when generating the pipeline, regardless of whether or not
+DAG pruning is enabled.  This flag controls whether it might attempt to
+fetch remote spec.yaml files directly (ensuring no spec is rebuilt if it is
+present on the mirror), or whether it should reduce pipeline generation time
+by assuming all remote buildcache indices are up to date and only use those
+to determine whether a given spec is up to date on mirrors.  In the latter
+case, specs might be needlessly rebuilt if remote buildcache indices are out
+of date.""")
     generate.set_defaults(func=ci_generate)
 
     # Check a spec against mirror. Rebuild, create buildcache and push to
@@ -87,10 +95,6 @@ def ci_generate(args):
        for creating a build group for the generated workload and registering
        all generated jobs under that build group.  If this environment
        variable is not set, no build group will be created on CDash."""
-    if args.check_index_only:
-        tty.warn('--check-index-only is deprecated and no longer has any effect. '
-                 'See https://github.com/spack/spack/pull/22634 for details.')
-
     env = ev.get_env(args, 'ci generate', required=True)
 
     output_file = args.output_file
@@ -98,6 +102,7 @@ def ci_generate(args):
     run_optimizer = args.optimize
     use_dependencies = args.dependencies
     prune_dag = args.prune_dag
+    index_only = args.index_only
 
     if not output_file:
         output_file = os.path.abspath(".gitlab-ci.yml")
@@ -110,7 +115,7 @@ def ci_generate(args):
     # Generate the jobs
     spack_ci.generate_gitlab_ci_yaml(
         env, True, output_file, prune_dag=prune_dag,
-        run_optimizer=run_optimizer,
+        check_index_only=index_only, run_optimizer=run_optimizer,
         use_dependencies=use_dependencies)
 
     if copy_yaml_to:
