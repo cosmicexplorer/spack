@@ -10,6 +10,7 @@ import pytest
 
 from llnl.util.filesystem import resolve_link_target_relative_to_the_link
 
+import spack.fetch_strategy as fs
 import spack.mirror
 import spack.repo
 import spack.util.executable
@@ -109,7 +110,8 @@ def test_url_mirror(mock_archive):
 
 @pytest.mark.skipif(
     not which('git'), reason='requires git to be installed')
-def test_git_mirror(mock_git_repository):
+def test_git_mirror(mock_git_repository, patch_from_directive_for_git_ref):
+    patch_from_directive_for_git_ref(fs.GitRef.branch('master'))
     set_up_package('git-test', mock_git_repository, 'git')
     check_mirror()
     repos.clear()
@@ -139,8 +141,10 @@ def test_all_mirror(
         mock_git_repository,
         mock_svn_repository,
         mock_hg_repository,
-        mock_archive):
+        mock_archive,
+        patch_from_directive_for_git_ref):
 
+    patch_from_directive_for_git_ref(fs.GitRef.branch('master'))
     set_up_package('git-test', mock_git_repository, 'git')
     set_up_package('svn-test', mock_svn_repository, 'svn')
     set_up_package('hg-test', mock_hg_repository, 'hg')
