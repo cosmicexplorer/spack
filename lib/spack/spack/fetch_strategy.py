@@ -31,7 +31,7 @@ import shutil
 import sys
 import uuid
 from textwrap import dedent
-from typing import ClassVar, Iterator, List, Optional, Tuple  # novm
+from typing import Any, ClassVar, Iterator, List, Optional, Tuple  # novm
 
 import six
 import six.moves.urllib.parse as urllib_parse
@@ -854,15 +854,21 @@ class GitRef(object):
         return cls('branch', ref)
 
     @classmethod
-    def from_directive(cls, commit, tag, branch, version_name):
-        # type: (Optional[str], Optional[str], Optional[str], Optional[str]) -> GitRef
+    def from_version_directive(cls, kwargs):
+        # type: (Any) -> GitRef
+        # (1) Extract the relevant arguments.
+        commit = kwargs.pop('commit', None)
+        tag = kwargs.pop('tag', None)
+        branch = kwargs.pop('branch', None)
+        version_name = kwargs.pop('version_name', None)
+        # (2) Ensure no mutually exclusive kwargs are provided.
         num_specified = len(list(filter(None, [commit, tag, branch])))
-        # If no explicit git ref arguments are provided, assume that the version string
-        # is to be used as the branch.
+        # (3) If no explicit git ref arguments are provided, assume that the version
+        # string itself is to be used as the branch name.
         if (num_specified == 0) and version_name is not None:
             return cls.branch(version_name)
-        # Otherwise, error if we have ambiguous ref arguments, or no ref arguments
-        # at all.
+        # (4) Otherwise, we have ambiguous ref arguments, or no ref arguments at all,
+        # so error.
         if num_specified != 1:
             raise InvalidGitRef(dedent("""\
             Exactly one of commit, tag, or branch must be specified for a git url.
@@ -916,6 +922,52 @@ class GitRef(object):
             return 'at tag {0}'.format(self._ref)
         assert self._ref_type == 'branch', self
         return 'on branch {0}'.format(self._ref)
+
+
+class GitFetchStageConfiguration(object):
+    """Validate parameters used to customize a specific git fetch operation.
+
+    This information is orthogonal to that which is processed in `GitRef`. It describes
+    what operations are performed to *prepare* a git checkout for a spack `Stage`,
+    *after* fetching the configured ref.
+    """
+    submodules = None           # type: bool
+    submodules_delete = None    # type: Optional[List[str]]
+    get_full_repo = None        # type: bool
+
+    def __init__(self, submodules, submodules_delete, get_full_repo):
+        # type: (bool, Optional[List[str]], bool) -> None
+        self.submodules = submodules
+        self.submodules_delete = submodules_delete
+        self.get_full_repo = get_full_repo
+
+    @classmethod
+    def _extract_bool(cls, kwargs, name, default):
+        # type: (Any, str, bool) -> bool
+        value = kwargs.pop(name, default)
+        if isinstance(value, bool):
+            return value
+        raise InvalidGitFetchStageConfig(
+            'argument {0}={1!r} must be a bool'.format(name, value))
+
+    @classmethod
+    def from_version_directive(cls, kwargs):
+        # type: (Any) -> GitFetchStageConfiguration
+        try:
+            submodules = cls._extract_bool(kwargs, 'submodules', False)
+            submodules_delete = kwargs.pop('submodules_delete', None)
+            if not isinstance(submodules_delete, (list, type(None))):
+                raise InvalidGitFetchStageConfig(
+                    'argument submodules_delete={0!r} must be a list of str'
+                    .format(submodules_delete))
+            get_full_repo = cls._extract_bool(kwargs, 'get_full_repo', False)
+        except InvalidGitFetchStageConfig as e:
+            raise InvalidGitFetchStageConfig(
+                'failed to parse {0} from kwargs {1}: {2}'
+                .format(cls.__name__, kwargs, e))
+        return cls(submodules=submodules,
+                   submodules_delete=submodules_delete,
+                   get_full_repo=get_full_repo)
 
 
 class ConfiguredGit(object):
@@ -1040,18 +1092,19 @@ class GitRepo(object):
         except ProcessError:
             return None
 
-    def fetch(self, remote_url, ref, submodules, get_full_repo, verbose):
-        # type: (str, GitRef, bool, bool, bool) -> None
+    def fetch(self, remote_url, ref, stage_config, verbose):
+        # type: (str, GitRef, GitFetchStageConfiguration, bool) -> None
         """Fetch the specified ref from the specified remote into the current repo."""
         args = (
             'fetch',
             '--verbose' if verbose else '--quiet',
-            '--recurse-submodules={0}'.format('on-demand' if submodules else 'no'),
+            '--recurse-submodules={0}'.format(
+                'on-demand' if stage_config.submodules else 'no'),
         )
 
         # If `get_full_repo=True`, first try to pull all new content down from the
         # remote without force-updating anything, and swallow any errors.
-        if get_full_repo:
+        if stage_config.get_full_repo:
             try:
                 # The refspec will fetch all branches from the remote, while
                 # '--tags' will fetch tags pointing into any of those branches.
@@ -1169,37 +1222,30 @@ class GitFetchStrategy(VCSFetchStrategy):
     optional_attrs = ['tag', 'branch', 'commit', 'version_name',
                       'submodules', 'get_full_repo', 'submodules_delete']
 
-    # Instance properties:
-    submodules = None           # type: bool
-    submodules_delete = None    # type: List[str]
-    get_full_repo = None        # type: bool
-    commit = None               # type: Optional[str]
-    tag = None                  # type: Optional[str]
-    branch = None               # type: Optional[str]
-    # This argument is produced in the processing of git version() directives.
-    version_name = None         # type: Optional[str]
+    # These fields are parsed from the constructor kwargs, i.e. the specified
+    # `optional_attrs`.
     ref = None                  # type: GitRef
+    stage_config = None         # type: GitFetchStageConfiguration
 
     git_version_re = r'git version (\S+)'
 
     def __init__(self, **kwargs):
+        # type: (Any) -> None
         # Discards the keywords in kwargs that may conflict with the next call
         # to __init__.
         kwargs.pop('name', None)
         super(GitFetchStrategy, self).__init__(**kwargs)
 
-        self.submodules = kwargs.pop('submodules', False)
-        self.submodules_delete = kwargs.pop('submodules_delete', False)
-        self.get_full_repo = kwargs.pop('get_full_repo', False)
-
-        # Interpret the specific ref from the `version()` directive arguments. Error if
-        # there's any ambiguity.
         try:
-            self.ref = GitRef.from_directive(
-                commit=self.commit,
-                tag=self.tag,
-                branch=self.branch,
-                version_name=self.version_name)
+            self.stage_config = (
+                GitFetchStageConfiguration.from_version_directive(kwargs))
+        except InvalidGitFetchStageConfig as e:
+            raise FetcherConflict(
+                'Failed to parse git fetch stage config '
+                'from the version() arguments {0}:\n\n{1}'.format(kwargs, e))
+
+        try:
+            self.ref = GitRef.from_version_directive(kwargs)
         except InvalidGitRef as e:
             raise FetcherConflict(
                 'Failed to identity an unambiguous refspec (commit, tag, or branch) '
@@ -1255,8 +1301,7 @@ class GitFetchStrategy(VCSFetchStrategy):
         before returning.
         """
         verbose = bool(spack.config.get('config:debug'))
-        self.canonical_git_repo.fetch(self.url, self.ref,
-                                      self.submodules, self.get_full_repo,
+        self.canonical_git_repo.fetch(self.url, self.ref, self.stage_config,
                                       verbose=verbose)
         new_ref = self._maybe_expand_ref()
         assert new_ref is not None, (self.ref, self.canonical_git_repo)
@@ -1309,13 +1354,13 @@ class GitFetchStrategy(VCSFetchStrategy):
 
         verbose = bool(spack.config.get('config:debug'))
 
-        if self.submodules:
+        if self.stage_config.submodules:
             # We decided whether to fetch submodule info earlier, but this command
             # actually performs the update operations over the checked-out submodules.
             worktree_repo.update_submodules(verbose=verbose)
 
-            if self.submodules_delete:
-                for submodule_to_delete in self.submodules_delete:
+            if self.stage_config.submodules_delete:
+                for submodule_to_delete in self.stage_config.submodules_delete:
                     worktree_repo.delete_submodule(submodule_to_delete, verbose=verbose)
 
         return worktree_repo
@@ -2030,6 +2075,10 @@ class NoStageError(FetchError):
 
 class InvalidGitRef(ValueError):
     """Raised internally when a single git version can't be deduced."""
+
+
+class InvalidGitFetchStageConfig(ValueError):
+    """Raised internally when git fetching parameters can't be parsed."""
 
 
 class FailedGitFetch(FetchError):

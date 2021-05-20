@@ -13,7 +13,8 @@ from llnl.util.filesystem import touch, working_dir
 
 import spack.config
 import spack.repo
-from spack.fetch_strategy import ConfiguredGit, GitFetchStrategy, GitRef
+from spack.fetch_strategy import (ConfiguredGit, GitFetchStrategy, GitRef,
+                                  FetcherConflict)
 from spack.spec import Spec
 from spack.stage import Stage
 from spack.version import ver
@@ -52,8 +53,11 @@ def git_version(request, monkeypatch):
         # Patch the fetch strategy to think it's using a lower git version.
         # we use this to test what we'd need to do with older git versions
         # using a newer git installation.
+        def get_test_git_version(_cls, _git):
+            return test_git_version
         monkeypatch.setattr(ConfiguredGit, '_get_git_version',
-                            lambda _: test_git_version)
+                            # Need to explicitly bind the function to the class for py2.
+                            get_test_git_version.__get__(ConfiguredGit))
         yield test_git_version
 
 
@@ -92,7 +96,7 @@ def test_git_fetch(type_of_test,
                    config,
                    mutable_mock_repo,
                    git_version,
-                   patch_from_directive_for_git_ref):
+                   patch_from_version_directive_for_git_ref):
     """Performs multiple operations in series for a given refspec.
 
     1. Fetch the repo using a git fetch strategy constructed with
@@ -107,14 +111,14 @@ def test_git_fetch(type_of_test,
     h = mock_git_repository.hash
 
     if type_of_test == 'master':
-        patch_from_directive_for_git_ref(GitRef.branch('master'))
+        patch_from_version_directive_for_git_ref(GitRef.branch('master'))
     elif type_of_test == 'branch':
-        patch_from_directive_for_git_ref(GitRef.branch(t.revision))
+        patch_from_version_directive_for_git_ref(GitRef.branch(t.revision))
     elif type_of_test == 'tag':
-        patch_from_directive_for_git_ref(GitRef.tag(t.revision))
+        patch_from_version_directive_for_git_ref(GitRef.tag(t.revision))
     else:
         assert type_of_test == 'commit', type_of_test
-        patch_from_directive_for_git_ref(GitRef.commit(t.revision))
+        patch_from_version_directive_for_git_ref(GitRef.commit(t.revision))
 
     # Construct the package under test
     spec = Spec('git-test')
@@ -292,3 +296,37 @@ def test_gitsubmodules_delete(mock_git_repository, config, mutable_mock_repo):
         file_path = os.path.join(pkg.stage.source_path,
                                  'third_party/submodule1')
         assert not os.path.isdir(file_path)
+
+
+def test_invalid_git_fetch_strategy_parsing():
+    """Trigger a FetcherConflict when parsing version() is ambiguous or malformed."""
+    # Does not raise.
+    _ = GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
+                         submodules=True, submodules_delete=['something'],
+                         get_full_repo=True)
+    _ = GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
+                         submodules=False, submodules_delete=None,
+                         get_full_repo=False)
+    _ = GitFetchStrategy(git='file:///not-a-real-git-repo', version_name='master',
+                         submodules=False, submodules_delete=None,
+                         get_full_repo=False)
+    # Raises for invalid version() specifications.
+    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
+        GitFetchStrategy(git='file:///not-a-real-git-repo')
+    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
+        GitFetchStrategy(git='file:///not-a-real-git-repo', tag='asdf', branch='fdsa')
+    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
+        GitFetchStrategy(git='file:///not-a-real-git-repo', commit='asdf', tag='fdsa')
+    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
+        GitFetchStrategy(git='file:///not-a-real-git-repo', tag='asdf', branch='fdsa')
+    # Raises for invalid information on how to prepare the checkout for the spack stage.
+    with pytest.raises(FetcherConflict, match=r"submodules=.*must be a bool"):
+        GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
+                         submodules='True')
+    with pytest.raises(FetcherConflict,
+                       match=r"submodules_delete=.*must be a list of str"):
+        GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
+                         submodules_delete='something')
+    with pytest.raises(FetcherConflict, match=r"get_full_repo=.*must be a bool"):
+        GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
+                         get_full_repo='True')

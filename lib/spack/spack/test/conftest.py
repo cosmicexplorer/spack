@@ -1415,16 +1415,18 @@ def mock_test_stage(mutable_config, tmpdir):
 
 
 @pytest.fixture(scope='function')
-def patch_from_directive_for_git_ref(monkeypatch):
+def patch_from_version_directive_for_git_ref(monkeypatch):
     """Ensure the git fetch strategy resolves the desired reference."""
 
     def from_ref(ref):
         assert isinstance(ref, fs.GitRef), ref
 
-        def from_directive(*args, **kwargs):
+        def from_version_directive(*args, **kwargs):
             return ref
-        # py2 complains unless you bind the .from_directive() classmethod to the class.
-        from_directive = from_directive.__get__(fs.GitRef, fs.GitRef.__class__)
-        monkeypatch.setattr(fs.GitRef, 'from_directive', from_directive)
+        # py2 complains unless you bind the .from_version_directive() classmethod to
+        # the class.
+        from_version_directive = from_version_directive.__get__(fs.GitRef,
+                                                                fs.GitRef.__class__)
+        monkeypatch.setattr(fs.GitRef, 'from_version_directive', from_version_directive)
 
     return from_ref
