@@ -6,13 +6,15 @@
 This is a fake set of symbols to allow spack to import typing in python
 versions where we do not support type checking (<3)
 """
+from collections import defaultdict
+
 Annotated = None
 Any = None
 Callable = None
 ForwardRef = None
 Generic = None
 Literal = None
-Optional = None
+Optional = defaultdict(lambda: object)
 Tuple = None
 TypeVar = None
 Union = None
