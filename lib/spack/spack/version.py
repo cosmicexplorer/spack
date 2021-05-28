@@ -27,10 +27,26 @@ be called on any of the types::
 import numbers
 import os
 import re
+from abc import ABCMeta, abstractmethod, abstractproperty
 from bisect import bisect_left
 from functools import wraps
 
-from six import string_types
+from typing import (  # novm
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+)
+from typing_extensions import Literal, overload  # novm
+
+from six import add_metaclass, string_types
 
 import llnl.util.tty as tty
 from llnl.util.filesystem import mkdirp, working_dir
@@ -45,7 +61,7 @@ from spack.util.spack_yaml import syaml_dict
 __all__ = ['Version', 'VersionRange', 'VersionList', 'ver']
 
 # Valid version characters
-VALID_VERSION = re.compile(r'^[A-Za-z0-9_.-]+$')
+VALID_VERSION = re.compile(r'^[A-Za-z0-9_\-\.]+$')
 
 # regex for a commit version
 COMMIT_VERSION = re.compile(r'^[a-f0-9]{40}$')
@@ -65,6 +81,7 @@ iv_min_len = min(len(s) for s in infinity_versions)
 
 
 def coerce_versions(a, b):
+    # type: (Any, Any) -> Tuple[VersionPredicate, VersionPredicate]
     """
     Convert both a and b to the 'greatest' type between them, in this order:
            Version < VersionRange < VersionList
@@ -75,8 +92,11 @@ def coerce_versions(a, b):
     ta, tb = type(a), type(b)
 
     def check_type(t):
+        # type: (Type) -> None
         if t not in order:
-            raise TypeError("coerce_versions cannot be called on %s" % t)
+            raise TypeError(
+                "coerce_versions cannot be called on {0}: need one of {1}"
+                .format(t, order))
     check_type(ta)
     check_type(tb)
 
@@ -165,7 +185,109 @@ class VersionStrComponent(object):
         return not self.__lt__(other)
 
 
-class Version(object):
+V = TypeVar('V', bound='VersionPredicate')
+
+
+def _abstract_method(fun):
+    @wraps(fun)
+    def callable(*args, **kwargs):
+        raise NotImplementedError('function {}()'.format(fun.__name__))
+    return callable
+
+
+def _abstract_property(fun):
+    @property
+    @wraps(fun)
+    def prop(*args, **kwargs):
+        raise NotImplementedError('function {}()'.format(fun.__name__))
+    return prop
+
+
+class VersionPredicate(Generic[V]):
+
+    @classmethod
+    @_abstract_method
+    def parse(cls, string):
+        # type: (str) -> VersionPredicate
+        pass
+
+    @_abstract_method
+    def lowest(self):
+        # type: () -> Optional[Version]
+        pass
+
+    @_abstract_method
+    def highest(self):
+        # type: () -> Optional[Version]
+        pass
+
+    @_abstract_method
+    def satisfies(self, other):
+        # type: (V) -> bool
+        pass
+
+    @_abstract_method
+    def __contains__(self, other):
+        # type: (V) -> bool
+        pass
+
+    @_abstract_method
+    def overlaps(self, other):
+        # type: (V) -> bool
+        pass
+
+    @_abstract_method
+    def union(self, other):
+        # type: (V) -> VersionPredicate
+        pass
+
+    @_abstract_method
+    def intersection(self, other):
+        # type: (V) -> VersionPredicate
+        pass
+
+    @_abstract_property
+    def concrete(self):
+        # type: () -> Optional[Version]
+        pass
+
+    @_abstract_method
+    def __lt__(self, other):
+        # type: (V) -> bool
+        pass
+
+    @_abstract_method
+    def __le__(self, other):
+        # type: (V) -> bool
+        pass
+
+    @_abstract_method
+    def __gt__(self, other):
+        # type: (V) -> bool
+        pass
+
+    @_abstract_method
+    def __ge__(self, other):
+        # type: (V) -> bool
+        pass
+
+    @_abstract_method
+    def __eq__(self, other):
+        # type: (Any) -> bool
+        pass
+
+    @_abstract_method
+    def __ne__(self, other):
+        # type: (Any) -> bool
+        pass
+
+    @_abstract_method
+    def __hash__(self):
+        # type: () -> int
+        pass
+
+
+class Version(VersionPredicate['Version']):
     """Class to represent versions"""
     __slots__ = [
         "version",
@@ -176,13 +298,19 @@ class Version(object):
         "commit_version",
     ]
 
+    @classmethod
+    def parse(cls, string):
+        # type: (str) -> Version
+        return cls(string)
+
     def __init__(self, string):
+        # type: (Any) -> None
         if not isinstance(string, str):
             string = str(string)
 
         # preserve the original string, but trimmed.
         string = string.strip()
-        self.string = string
+        self.string = string    # type: str
 
         if string and not VALID_VERSION.match(string):
             raise ValueError("Bad characters in version string: %s" % string)
@@ -193,8 +321,8 @@ class Version(object):
         segments = SEGMENT_REGEX.findall(string)
         self.version = tuple(
             int(m[0]) if m[0] else VersionStrComponent(m[1]) for m in segments
-        )
-        self.separators = tuple(m[2] for m in segments)
+        )  # type: Tuple[Union[int, VersionStrComponent], ...]
+        self.separators = tuple(m[2] for m in segments)  # type: Tuple[str, ...]
 
         self.is_commit = len(self.string) == 40 and COMMIT_VERSION.match(self.string)
 
@@ -219,6 +347,7 @@ class Version(object):
 
     @property
     def dotted(self):
+        # type: () -> Version
         """The dotted representation of the version.
 
         Example:
@@ -233,6 +362,7 @@ class Version(object):
 
     @property
     def underscored(self):
+        # type: () -> Version
         """The underscored representation of the version.
 
         Example:
@@ -248,6 +378,7 @@ class Version(object):
 
     @property
     def dashed(self):
+        # type: () -> Version
         """The dashed representation of the version.
 
         Example:
@@ -262,6 +393,7 @@ class Version(object):
 
     @property
     def joined(self):
+        # type: () -> Version
         """The joined representation of the version.
 
         Example:
@@ -276,6 +408,7 @@ class Version(object):
             self.string.replace('.', '').replace('-', '').replace('_', ''))
 
     def up_to(self, index):
+        # type: (int) -> Version
         """The version up to the specified component.
 
         Examples:
@@ -301,12 +434,15 @@ class Version(object):
         return self[:index]
 
     def lowest(self):
+        # type: () -> Version
         return self
 
     def highest(self):
+        # type: () -> Version
         return self
 
     def isdevelop(self):
+        # type: () -> bool
         """Triggers on the special case of the `@develop-like` version."""
         for inf in infinity_versions:
             for v in self.version:
@@ -317,6 +453,7 @@ class Version(object):
 
     @coerced
     def satisfies(self, other):
+        # type: (Version) -> bool
         """A Version 'satisfies' another if it is at least as specific and has
         a common prefix.  e.g., we want gcc@4.7.3 to satisfy a request for
         gcc@4.7 so that when a user asks to build with gcc@4.7, we can find
@@ -331,12 +468,25 @@ class Version(object):
         return nother <= nself and self_cmp[:nother] == other_cmp
 
     def __iter__(self):
+        # type: () -> Iterator[Union[int, VersionStrComponent]]
         return iter(self.version)
 
     def __len__(self):
+        # type: () -> int
         return len(self.version)
 
+    @overload
     def __getitem__(self, idx):
+        # type: (int) -> Union[int, VersionStrComponent]
+        pass
+
+    @overload
+    def __getitem__(self, idx):
+        # type: (slice) -> Version
+        pass
+
+    def __getitem__(self, idx):
+        # type: (Union[int, slice]) -> Union[Union[int, VersionStrComponent], Version]
         cls = type(self)
 
         if isinstance(idx, numbers.Integral):
@@ -361,20 +511,25 @@ class Version(object):
         raise TypeError(message.format(cls=cls))
 
     def __repr__(self):
-        return 'Version(' + repr(self.string) + ')'
+        # type: () -> str
+        return 'Version.parse({0!r})'.format(self.string)
 
     def __str__(self):
+        # type: () -> str
         return self.string
 
     def __format__(self, format_spec):
+        # type: (str) -> str
         return self.string.format(format_spec)
 
     @property
     def concrete(self):
+        # type: () -> Version
         return self
 
     @coerced
     def __lt__(self, other):
+        # type: (Version) -> bool
         """Version comparison is designed for consistency with the way RPM
            does things.  If you need more complicated versions in installed
            packages, you should override your package's version string to
@@ -393,6 +548,7 @@ class Version(object):
 
     @coerced
     def __eq__(self, other):
+        # type: (Any) -> bool
 
         # Cut out early if we don't have a version
         if other is None or type(other) != Version:
@@ -402,25 +558,31 @@ class Version(object):
 
     @coerced
     def __ne__(self, other):
+        # type: (Any) -> bool
         return not (self == other)
 
     @coerced
     def __le__(self, other):
+        # type: (Version) -> bool
         return self == other or self < other
 
     @coerced
     def __ge__(self, other):
+        # type: (Version) -> bool
         return not (self < other)
 
     @coerced
     def __gt__(self, other):
+        # type: (Version) -> bool
         return not (self == other) and not (self < other)
 
     def __hash__(self):
+        # type: () -> int
         return hash(self.version)
 
     @coerced
     def __contains__(self, other):
+        # type: (Version) -> bool
         if other is None:
             return False
 
@@ -428,6 +590,7 @@ class Version(object):
         return other._cmp(self.commit_lookup)[:len(self_cmp)] == self_cmp
 
     def is_predecessor(self, other):
+        # type: (Version) -> bool
         """True if the other version is the immediate predecessor of this one.
            That is, NO non-commit versions v exist such that:
            (self < v < other and v not in self).
@@ -443,14 +606,17 @@ class Version(object):
         return type(sl) == int and type(ol) == int and (ol - sl == 1)
 
     def is_successor(self, other):
+        # type: (Version) -> bool
         return other.is_predecessor(self)
 
     @coerced
     def overlaps(self, other):
+        # type: (Version) -> bool
         return self in other or other in self
 
     @coerced
     def union(self, other):
+        # type: (Version) -> VersionPredicate
         if self == other or other in self:
             return self
         elif self in other:
@@ -460,6 +626,7 @@ class Version(object):
 
     @coerced
     def intersection(self, other):
+        # type: (Version) -> VersionPredicate
         if self in other:  # also covers `self == other`
             return self
         elif other in self:
@@ -496,9 +663,16 @@ class Version(object):
         self.commit_lookup.save()
 
 
-class VersionRange(object):
+class VersionRange(VersionPredicate['VersionRange']):
+    start = None  # type: Optional[Version]
+    end = None    # type: Optional[Version]
+
+    @classmethod
+    def parse(cls, s):
+        raise NotImplementedError(s)
 
     def __init__(self, start, end):
+        # type: (Optional[Union[str, Version]], Optional[Union[str, Version]]) -> None
         if isinstance(start, string_types):
             start = Version(start)
         if isinstance(end, string_types):
@@ -514,18 +688,24 @@ class VersionRange(object):
         # Do not allow empty ranges. We have to be careful about lexicographical
         # ordering of versions here: 1.2 < 1.2.3 lexicographically, but 1.2.3:1.2
         # means the range [1.2.3, 1.3), which is non-empty.
-        min_len = min(len(start), len(end))
-        if end.up_to(min_len) < start.up_to(min_len):
-            raise ValueError("Invalid Version range: %s" % self)
+        start_len = len(start.value) if start.value is not None else 0
+        end_len = len(end.value) if end.value is not None else 0
+        if start.value and end.value:
+            min_len = min(len(start.value), len(end.value))
+            if end.value.up_to(min_len) < start.value.up_to(min_len):
+                raise ValueError("Invalid Version range: %s" % self)
 
     def lowest(self):
+        # type: () -> Optional[Version]
         return self.start
 
     def highest(self):
+        # type: () -> Optional[Version]
         return self.end
 
     @coerced
     def __lt__(self, other):
+        # type: (VersionRange) -> bool
         """Sort VersionRanges lexicographically so that they are ordered first
            by start and then by end.  None denotes an open range, so None in
            the start position is less than everything except None, and None in
@@ -543,32 +723,39 @@ class VersionRange(object):
 
     @coerced
     def __eq__(self, other):
+        # type: (Any) -> bool
         return (other is not None and
                 type(other) == VersionRange and
                 self.start == other.start and self.end == other.end)
 
     @coerced
     def __ne__(self, other):
+        # type: (Any) -> bool
         return not (self == other)
 
     @coerced
     def __le__(self, other):
+        # type: (VersionRange) -> bool
         return self == other or self < other
 
     @coerced
     def __ge__(self, other):
+        # type: (VersionRange) -> bool
         return not (self < other)
 
     @coerced
     def __gt__(self, other):
+        # type: (VersionRange) -> bool
         return not (self == other) and not (self < other)
 
     @property
     def concrete(self):
+        # type: () -> Optional[Version]
         return self.start if self.start == self.end else None
 
     @coerced
     def __contains__(self, other):
+        # type: (VersionRange) -> bool
         if other is None:
             return False
 
@@ -589,7 +776,34 @@ class VersionRange(object):
 
     @coerced
     def satisfies(self, other):
-        """
+        # type: (VersionRange) -> bool
+        """A VersionRange satisfies another if some version in this range
+        would satisfy some version in the other range.  To do this it must
+        either:
+
+        a) Overlap with the other range
+        b) The start of this range satisfies the end of the other range.
+
+        This is essentially the same as overlaps(), but overlaps assumes
+        that its arguments are specific.  That is, 4.7 is interpreted as
+        4.7.0.0.0.0... .  This function assumes that 4.7 would be satisfied
+        by 4.7.3.5, etc.
+
+        Rationale:
+
+        If a user asks for gcc@4.5:4.7, and a package is only compatible with
+        gcc@4.7.3:4.8, then that package should be able to build under the
+        constraints.  Just using overlaps() would not work here.
+
+        Note that we don't need to check whether the end of this range
+        would satisfy the start of the other range, because overlaps()
+        already covers that case.
+
+        Note further that overlaps() is a symmetric operation, while
+        satisfies() is not.
+        
+        ?
+
         x.satisfies(y) in general means that x and y have a
         non-zero intersection. For VersionRange this means they overlap.
 
@@ -605,10 +819,16 @@ class VersionRange(object):
         - 1:2 does not satisfy 3:4, as their intersection is empty.
         - 4.5:4.7 satisfies 4.7.2:4.8, as their intersection is 4.7.2:4.7
         """
-        return self.overlaps(other)
+        return (self.overlaps(other) or
+                # if either self.start or other.end are None, then this can't
+                # satisfy, or overlaps() would've taken care of it.
+                self.start is not None and
+                other.end is not None and
+                self.start.satisfies(other.end))
 
     @coerced
     def overlaps(self, other):
+        # type: (VersionRange) -> bool
         return ((self.start is None or other.end is None or
                  self.start <= other.end or
                  other.end in self.start or self.start in other.end) and
@@ -618,6 +838,7 @@ class VersionRange(object):
 
     @coerced
     def union(self, other):
+        # type: (VersionRange) -> VersionPredicate
         if not self.overlaps(other):
             if (self.end is not None and other.start is not None and
                     self.end.is_predecessor(other.start)):
@@ -651,6 +872,7 @@ class VersionRange(object):
 
     @coerced
     def intersection(self, other):
+        # type: (VersionRange) -> VersionPredicate
         if self.overlaps(other):
             if self.start is None:
                 start = other.start
@@ -680,12 +902,15 @@ class VersionRange(object):
             return VersionList()
 
     def __hash__(self):
+        # type: () -> int
         return hash((self.start, self.end))
 
     def __repr__(self):
+        # type: () -> str
         return self.__str__()
 
     def __str__(self):
+        # type: () -> str
         out = ""
         if self.start:
             out += str(self.start)
@@ -695,29 +920,44 @@ class VersionRange(object):
         return out
 
 
-class VersionList(object):
+_VlistType = Optional[
+    'Union[str, VersionPredicate, Iterable[Union[str, VersionPredicate]]]'
+]
+
+
+class VersionList(VersionPredicate['VersionList']):
     """Sorted, non-redundant list of Versions and VersionRanges."""
+    versions = None  # type: List[Union[Version, VersionRange]]
+
+    @classmethod
+    def parse(cls, s):
+        # type: (str) -> VersionList
+        return cls(s)
 
     def __init__(self, vlist=None):
+        # type: (_VlistType) -> None
         self.versions = []
         if vlist is not None:
             if isinstance(vlist, string_types):
                 vlist = _string_to_version(vlist)
-                if type(vlist) == VersionList:
+                if isinstance(vlist, VersionList):
                     self.versions = vlist.versions
                 else:
+                    assert isinstance(vlist, (Version, VersionRange)), vlist
                     self.versions = [vlist]
             else:
+                vlist = list(vlist)  # type: ignore[arg-type]
                 for v in vlist:
                     self.add(ver(v))
 
     def add(self, version):
-        if type(version) in (Version, VersionRange):
+        # type: (VersionPredicate) -> None
+        if isinstance(version, (Version, VersionRange)):
             # This normalizes single-value version ranges.
             if version.concrete:
                 version = version.concrete
 
-            i = bisect_left(self, version)
+            i = bisect_left(list(self), version)
 
             while i - 1 >= 0 and version.overlaps(self[i - 1]):
                 version = version.union(self[i - 1])
@@ -728,9 +968,10 @@ class VersionList(object):
                 version = version.union(self[i])
                 del self.versions[i]
 
+            assert isinstance(version, (Version, VersionRange)), version
             self.versions.insert(i, version)
 
-        elif type(version) == VersionList:
+        elif isinstance(version, VersionList):
             for v in version:
                 self.add(v)
 
@@ -739,15 +980,18 @@ class VersionList(object):
 
     @property
     def concrete(self):
+        # type: () -> Optional[Version]
         if len(self) == 1:
             return self[0].concrete
         else:
             return None
 
     def copy(self):
+        # type: () -> VersionList
         return VersionList(self)
 
     def lowest(self):
+        # type: () -> Optional[Version]
         """Get the lowest version in the list."""
         if not self:
             return None
@@ -755,6 +999,7 @@ class VersionList(object):
             return self[0].lowest()
 
     def highest(self):
+        # type: () -> Optional[Version]
         """Get the highest version in the list."""
         if not self:
             return None
@@ -762,16 +1007,18 @@ class VersionList(object):
             return self[-1].highest()
 
     def highest_numeric(self):
+        # type: () -> Optional[Version]
         """Get the highest numeric version in the list."""
         numeric_versions = list(filter(
             lambda v: str(v) not in infinity_versions,
-            self.versions))
+            self.versions))  # type: List[VersionPredicate]
         if not any(numeric_versions):
             return None
         else:
             return numeric_versions[-1].highest()
 
     def preferred(self):
+        # type: () -> Optional[Version]
         """Get the preferred (latest) version in the list."""
         latest = self.highest_numeric()
         if latest is None:
@@ -780,6 +1027,7 @@ class VersionList(object):
 
     @coerced
     def overlaps(self, other):
+        # type: (VersionList) -> bool
         if not other or not self:
             return False
 
@@ -794,6 +1042,7 @@ class VersionList(object):
         return False
 
     def to_dict(self):
+        # type: () -> Dict[str, Union[str, Iterable[str]]]
         """Generate human-readable dict for YAML."""
         if self.concrete:
             return syaml_dict([
@@ -806,16 +1055,18 @@ class VersionList(object):
 
     @staticmethod
     def from_dict(dictionary):
+        # type: (Dict[str, Union[str, Iterable[str]]]) -> VersionList
         """Parse dict from to_dict."""
         if 'versions' in dictionary:
             return VersionList(dictionary['versions'])
         elif 'version' in dictionary:
-            return VersionList([dictionary['version']])
+            return VersionList([dictionary['version']])  # type: ignore[list-item]
         else:
             raise ValueError("Dict must have 'version' or 'versions' in it.")
 
     @coerced
     def satisfies(self, other, strict=False):
+        # type: (VersionList, bool) -> bool
         """A VersionList satisfies another if some version in the list
            would satisfy some version in the other list.  This uses
            essentially the same algorithm as overlaps() does for
@@ -843,17 +1094,20 @@ class VersionList(object):
 
     @coerced
     def update(self, other):
+        # type: (VersionList) -> None
         for v in other.versions:
             self.add(v)
 
     @coerced
     def union(self, other):
+        # type: (VersionList) -> VersionPredicate
         result = self.copy()
         result.update(other)
         return result
 
     @coerced
     def intersection(self, other):
+        # type: (VersionList) -> VersionPredicate
         # TODO: make this faster.  This is O(n^2).
         result = VersionList()
         for s in self:
@@ -863,6 +1117,7 @@ class VersionList(object):
 
     @coerced
     def intersect(self, other):
+        # type: (VersionList) -> bool
         """Intersect this spec's list with other.
 
         Return True if the spec changed as a result; False otherwise
@@ -874,11 +1129,12 @@ class VersionList(object):
 
     @coerced
     def __contains__(self, other):
+        # type: (VersionList) -> bool
         if len(self) == 0:
             return False
 
         for version in other:
-            i = bisect_left(self, other)
+            i = bisect_left(list(self), other)
             if i == 0:
                 if version not in self[0]:
                     return False
@@ -887,56 +1143,81 @@ class VersionList(object):
 
         return True
 
+    @overload
     def __getitem__(self, index):
-        return self.versions[index]
+        # type: (int) -> Union[Version, VersionRange]
+        pass
+
+    @overload
+    def __getitem__(self, index):
+        # type: (slice) -> VersionList
+        pass
+
+    def __getitem__(self, index):
+        # type: (Union[int, slice]) -> Union[Version, VersionRange, VersionList]
+        return self.versions[index]  # type: ignore[return-value]
 
     def __iter__(self):
+        # type: () -> Iterator[Union[Version, VersionRange]]
         return iter(self.versions)
 
     def __reversed__(self):
+        # type: () -> Iterator[VersionPredicate]
         return reversed(self.versions)
 
     def __len__(self):
+        # type: () -> int
         return len(self.versions)
 
     def __bool__(self):
+        # type: () -> bool
         return bool(self.versions)
 
     @coerced
     def __eq__(self, other):
+        # type: (Any) -> bool
         return other is not None and self.versions == other.versions
 
     @coerced
     def __ne__(self, other):
+        # type: (Any) -> bool
         return not (self == other)
 
     @coerced
     def __lt__(self, other):
+        # type: (VersionList) -> bool
         return other is not None and self.versions < other.versions
 
     @coerced
     def __le__(self, other):
+        # type: (VersionList) -> bool
         return self == other or self < other
 
     @coerced
     def __ge__(self, other):
+        # type: (VersionList) -> bool
         return not (self < other)
 
     @coerced
     def __gt__(self, other):
+        # type: (VersionList) -> bool
         return not (self == other) and not (self < other)
 
     def __hash__(self):
+        # type: () -> int
         return hash(tuple(self.versions))
 
     def __str__(self):
+        # type: () -> str
         return ",".join(str(v) for v in self.versions)
 
     def __repr__(self):
+        # type: () -> str
         return str(self.versions)
 
 
 def _string_to_version(string):
+    # type: (str) -> VersionPredicate
     """Converts a string to a Version, VersionList, or VersionRange.
        This is private.  Client code should use ver().
     """
@@ -956,6 +1237,7 @@ def _string_to_version(string):
 
 
 def ver(obj):
+    # type: (Any) -> VersionPredicate
     """Parses a Version, VersionRange, or VersionList from a string
        or list of strings.
     """
