@@ -258,12 +258,12 @@ def test_version_ranges():
     assert_ver_lt('1.2:1.4', '1.5:1.6')
     assert_ver_gt('1.5:1.6', '1.2:1.4')
 
-    assert_in('1.5', VersionRange('1.5', '1.6'))
-    assert_in('1.6', VersionRange('1.5', '1.6'))
+    assert_in('1.5', VersionRange.parse('1.5:1.6'))
+    assert_in('1.6', VersionRange.parse('1.5:1.6'))
 
     assert VersionRange.parse('1.5:1.6') not in VersionRange.parse('1.5:!1.6')
     assert VersionRange.parse('1.5:1.6') not in VersionRange.parse('1.5!:1.6')
-    assert VersionRange.parse('1.5:1.6') < VersionRange.parse('1.5:!1.6')
+    assert VersionRange.parse('1.5:1.6') > VersionRange.parse('1.5:!1.6')
     assert VersionRange.parse('1.5:1.6') < VersionRange.parse('1.5!:1.6')
 
     assert_in('1.5', VersionRange.parse('1.5:!1.6'))
