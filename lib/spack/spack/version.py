@@ -612,15 +612,24 @@ class _VersionEndpoint(object):
 
     def __contains__(self, other):
         # type: (_VersionEndpoint) -> bool
-        return not (other < self or other > self)
-        # if self.is_wildcard:
-        #     return True
-        # if self.location == 'right':
-        #     return (other.value < self.value or
-        #             other.value in self.value)
-        # assert self.location == 'left', self
-        # return (other.value > self.value or
-        #         other.value in self.value)
+        # return not (other < self or other > self)
+        if self.value is None:
+            return True
+        if other.value is None:
+            return False
+        polarities_match = self.polarity == other.polarity
+        if self.location == 'right':
+            if other.location == 'left':
+                return other.value < self.value or other.value in self.value
+            if other.value in self.value:
+                return polarities_match
+            return other.value < self.value
+        assert self.location == 'left', self
+        if other.location == 'right':
+            return other.value > self.value or other.value in self.value
+        if other.value in self.value:
+            return polarities_match
+        return other.value > self.value
 
     def satisfies(self, other):
         # type: (_VersionEndpoint) -> bool
@@ -646,7 +655,9 @@ class _VersionEndpoint(object):
         # type: (Any) -> bool
         if not isinstance(other, _VersionEndpoint):
             return NotImplemented
-        return (self.value == other.value and self.location == other.location)
+        return (self.value == other.value and
+                self.location == other.location and
+                self.polarity == other.polarity)
 
     # TODO: consider @memoized since we impl __hash__?
     @_endpoint_only
@@ -659,6 +670,12 @@ class _VersionEndpoint(object):
             return True
         if other.value is None:
             return False
+        if self.location == other.location:
+            if self.value == other.value:
+                if self.polarity and not other.polarity:
+                    return False if self.location == 'right' else True
+                if other.polarity and not self.polarity:
+                    return True if self.location == 'right' else False
         return self.value < other.value
 
     @_endpoint_only
@@ -671,6 +688,12 @@ class _VersionEndpoint(object):
             return True
         if other.value is None:
             return False
+        if self.location == other.location:
+            if self.value == other.value:
+                if self.polarity and not other.polarity:
+                    return False if self.location == 'left' else True
+                if other.polarity and not self.polarity:
+                    return True if self.location == 'left' else False
         return self.value > other.value
 
     def __ne__(self, other):
@@ -821,11 +844,11 @@ class VersionRange(VersionPredicate['VersionRange']):
             return False
 
         s, o = self, other
-        if s.start != o.start:
-            return s.start.is_wildcard or (
-                not o.start.is_wildcard and s.start < o.start)
-        return (s.end != o.end and
-                o.end.is_wildcard or (not s.end.is_wildcard and s.end < o.end))
+        if s.start < o.start:
+            return True
+        if s.start > o.start:
+            return False
+        return s.end < o.end
 
     @coerced
     def __eq__(self, other):
@@ -852,6 +875,13 @@ class VersionRange(VersionPredicate['VersionRange']):
     @coerced
     def __gt__(self, other):
         # type: (VersionRange) -> bool
+        # if other is None:
+        #     return False
+
+        # s, o = self, other
+        # if s.start > o.start:
+        #     return True
+        # return s.end > o.end
         return not (self == other) and not (self < other)
 
     @property
@@ -869,19 +899,23 @@ class VersionRange(VersionPredicate['VersionRange']):
         if other is None:
             return False
 
-        in_lower = (self.start == other.start or
-                    self.start.is_wildcard or
-                    (not other.start.is_wildcard and (
-                        self.start < other.start or
-                        other.start in self.start)))
+        in_lower = (other.start in self.start and
+                    other.end in self.start)
+        # in_lower = ((self.start == other.start) or
+        #             self.start.value is None or
+        #             (other.start.value is not None and (
+        #                 (self.start < other.start) or
+        #                 other.start in self.start)))
         if not in_lower:
             return False
 
-        in_upper = (self.end == other.end or
-                    self.end.is_wildcard or
-                    (not other.end.is_wildcard and (
-                        self.end > other.end or
-                        other.end in self.end)))
+        in_upper = (other.start in self.end and
+                    other.end in self.end)
+        # in_upper = ((self.end == other.end) or
+        #             self.end.value is None or
+        #             (other.end.value is not None and (
+        #                 (self.end > other.end) or
+        #                 other.end in self.end)))
         return in_upper
 
     @coerced
@@ -912,21 +946,22 @@ class VersionRange(VersionPredicate['VersionRange']):
         Note further that overlaps() is a symmetric operation, while
         satisfies() is not.
         """
-        return (self.overlaps(other) or
-                # if either self.start or other.end are None, then this can't
-                # satisfy, or overlaps() would've taken care of it.
-                not self.start.is_wildcard and
-                not other.end.is_wildcard and
-                self.start.satisfies(other.end))
+        return self in other
+        # return (self.overlaps(other) or
+        #         # if either self.start or other.end are None, then this can't
+        #         # satisfy, or overlaps() would've taken care of it.
+        #         not self.start.is_wildcard and
+        #         not other.end.is_wildcard and
+        #         self.start.satisfies(other.end))
 
     @coerced
     def overlaps(self, other):
         # type: (VersionRange) -> bool
-        return ((self.start.is_wildcard or other.end.is_wildcard or
-                 self.start <= other.end or
+        # containment = self._endpoint_containment(other)
+        # return containment.low_contained or containment.high_contained
+        return ((self.start <= other.end or
                  other.end in self.start or self.start in other.end) and
-                (other.start.is_wildcard or self.end.is_wildcard or
-                 other.start <= self.end or
+                (other.start <= self.end or
                  other.start in self.end or self.end in other.start))
 
     @coerced
@@ -966,6 +1001,8 @@ class VersionRange(VersionPredicate['VersionRange']):
     @coerced
     def intersection(self, other):
         # type: (VersionRange) -> VersionPredicate
+        import pdb; pdb.set_trace()
+
         if self.overlaps(other):
             if self.start.is_wildcard:
                 start = other.start
@@ -989,6 +1026,11 @@ class VersionRange(VersionPredicate['VersionRange']):
                     if other.end < end or other.end in end:
                         end = other.end
 
+            if start in end and not start < end:
+                return start.value
+            if end in start and not end > start:
+                return end.value
+
             return VersionRange(start, end)
 
         return VersionList.empty()
@@ -999,7 +1041,7 @@ class VersionRange(VersionPredicate['VersionRange']):
 
     def __repr__(self):
         # type: () -> str
-        return 'VersionRange(start={0!r}, end={1!r})'.format(self.start, self.end)
+        return 'VersionRange.parse({0!r})'.format(str(self))
 
     def __str__(self):
         # type: () -> str
