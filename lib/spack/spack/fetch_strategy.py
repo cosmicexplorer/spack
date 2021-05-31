@@ -822,8 +822,8 @@ class GitRef(object):
     def __str__(self):
         return '<{0}>'.format(self.repo_info_for_reference())
 
-    # Matches any 10-40 character hexadecimal string.
-    _commit_rx = re.compile(r'^[0-9a-f]{10,40}$', flags=re.IGNORECASE)
+    # Matches any 7-40 character hexadecimal string.
+    _commit_rx = re.compile(r'^[0-9a-f]{7,40}$', flags=re.IGNORECASE)
 
     @classmethod
     def commit(cls, ref):
@@ -835,10 +835,10 @@ class GitRef(object):
         if not cls._commit_rx.match(ref):
             raise InvalidGitRef(dedent("""\
             Spack requires that references to individual git commits be specified via
-            a 10-40 character hexadecimal string, but received the string '{0}' instead.
+            a 7-40 character hexadecimal string, but received the string '{0}' instead.
 
             A valid commit hash case-insensitively matches the regular expression '{1}'.
-            10 hex characters is the size printed out by `git log --format='%h'`, while
+            7 hex characters is the size printed out by `git log --format='%h'`, while
             40 hex characters is the size printed out by `git log --format='%H'`.
             """.format(ref, cls._commit_rx.pattern)))
         return cls('commit', ref)
