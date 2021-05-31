@@ -24,8 +24,9 @@ be called on any of the types::
   intersection
   concrete
 """
-import re
+import math
 import numbers
+import re
 from abc import ABCMeta, abstractmethod, abstractproperty
 from bisect import bisect_left
 from functools import wraps
@@ -50,7 +51,7 @@ VALID_VERSION = re.compile(r'^[A-Za-z0-9_\-]+$')
 SEGMENT_REGEX = re.compile(r'(?:(?P<num>[0-9]+)|(?P<str>[a-zA-Z]+))(?P<sep>[_.-]*)')
 
 # Infinity-like versions. The order in the list implies the comparison rules
-infinity_versions = ['develop', 'main', 'master', 'head', 'trunk']
+infinity_versions = ['develop', 'main', 'master', 'head', 'trunk', math.inf]
 
 iv_min_len = min(len(s) for s in infinity_versions)
 
@@ -169,7 +170,7 @@ class VersionPredicate(Generic[V]):
     @classmethod
     @abstractmethod
     def parse(cls, string):
-        # type: (str) -> VersionPredicate
+        # type: (str) -> V
         pass
 
     @abstractmethod
@@ -250,10 +251,13 @@ class VersionPredicate(Generic[V]):
 
 class Version(VersionPredicate['Version']):
     """Class to represent versions"""
-    __slots__ = ['version', 'separators', 'string']
-    string = None               # type: str
-    version = None              # type: Tuple[Union[str, int], ...]
-    separators = None           # type: Tuple[str, ...]
+    __slots__ = ['version', 'separators', 'string',
+                 '_numeric_only_version', '_string_version']
+    string = None                  # type: str
+    version = None                 # type: Tuple[Union[str, int], ...]
+    separators = None              # type: Tuple[str, ...]
+    _numeric_only_version = None   # type: Tuple[int, ...]
+    _string_version = None         # type: Optional[str]
 
     @classmethod
     def parse(cls, string):
@@ -278,6 +282,16 @@ class Version(VersionPredicate['Version']):
             int(m[0]) if m[0] else VersionStrComponent(m[1]) for m in segments
         )
         self.separators = tuple(m[2] for m in segments)
+
+        # We can be sure this assertion will succeed because the string was checked
+        # against `VALID_VERSION` before getting here.
+        assert len(self.version) >= 1, self.version
+        self._string_version = (self.version[-1]
+                                if isinstance(self.version[-1], str)
+                                else None)
+        self._numeric_only_version = (self.version[:-1]
+                                      if self._string_version is not None
+                                      else self.version[:])
 
     @property
     def dotted(self):
@@ -367,13 +381,41 @@ class Version(VersionPredicate['Version']):
         """
         return self[:index]
 
+    def _extend_version_for_numerical_extreme(self, extreme_value):
+        # type: (Union[int, float]) -> Version
+        # If the final numerical component is exactly the "extreme value" we are trying
+        # to place at the end, then return. This operation is idempotent.
+        if (self._numeric_only_version and
+            self._numeric_only_version[-1] == extreme_value):
+            return self
+        # Otherwise, add the "extreme value" as the final component. This may end up
+        # being the first component as well if the version has no numerical components.
+        all_numeric_components = self._numeric_only_version + (extreme_value,)
+        if self._string_version is not None:
+            assert len(self.separators) >= 3, self.separators
+            separator_to_copy = self.separators[-3]
+            all_new_components = all_numeric_components + (self._string_version,)
+            all_new_separators = (
+                self.separators[:-2] + (separator_to_copy,) + self.separators[-2:])
+        else:
+            assert len(self.separators) >= 2, self.separators
+            separator_to_copy = self.separators[-2]
+            all_new_components = all_numeric_components
+            all_new_separators = (
+                self.separators[:-1] + (separator_to_copy,) + self.separators[-1:])
+        generated_version_string = ''
+        for component, separator in zip(all_new_components, all_new_separators):
+            generated_version_string += str(component)
+            generated_version_string += str(separator)
+        return type(self).parse(generated_version_string)
+
     def lowest(self):
         # type: () -> Version
-        return self
+        return self._extend_version_for_numerical_extreme(0)
 
     def highest(self):
         # type: () -> Version
-        return self
+        return self._extend_version_for_numerical_extreme(math.inf)
 
     def isdevelop(self):
         # type: () -> bool
@@ -492,6 +534,7 @@ class Version(VersionPredicate['Version']):
     @coerced
     def __gt__(self, other):
         # type: (Version) -> bool
+        # return other < self
         return not (self == other) and not (self < other)
 
     def __hash__(self):
@@ -713,28 +756,6 @@ class _VersionEndpoint(object):
         return self == other or self < other
 
 
-class _EndpointContainment(object):
-    low_contained = None          # type: bool
-    high_contained = None         # type: bool
-
-    def __init__(
-            self,
-            self_low,                                       # type: _VersionEndpoint
-            self_high,                                      # type: _VersionEndpoint
-            other_low,                                      # type: _VersionEndpoint
-            other_high,                                     # type: _VersionEndpoint
-    ):
-        # type: (...) -> None
-        assert isinstance(self_low, _VersionEndpoint) and self_low.location == 'left'
-        assert isinstance(self_high, _VersionEndpoint) and self_high.location == 'right'
-        assert isinstance(other_low, _VersionEndpoint) and other_low.location == 'left'
-        assert (isinstance(other_high, _VersionEndpoint) and
-                other_high.location == 'right')
-        self.low_contained = ((other_low in self_low) and (other_low in self_high))
-        self.high_contained = ((other_high in self_low) and (other_high in self_low))
-        # import pdb; pdb.set_trace()
-
-
 class VersionRange(VersionPredicate['VersionRange']):
     start = None  # type: _VersionEndpoint
     end = None    # type: _VersionEndpoint
@@ -814,23 +835,23 @@ class VersionRange(VersionPredicate['VersionRange']):
         self.start = start
         self.end = end
 
-    @memoized
-    def _endpoint_containment(self, other):
-        # type: (VersionRange) -> _EndpointContainment
-        return _EndpointContainment(
-            self_low=self.start,
-            self_high=self.end,
-            other_low=other.start,
-            other_high=other.end,
-        )
-
     def lowest(self):
         # type: () -> Optional[Version]
-        return self.start.value
+        if self.start.polarity:
+            if self.start.value is not None:
+                return self.start.value.lowest()
+            return None
+        assert self.start.value is not None, self.start
+        return self.start.value.successor()
 
     def highest(self):
         # type: () -> Optional[Version]
-        return self.end.value
+        if self.end.polarity:
+            if self.end.value is not None:
+                return self.end.value.highest()
+            return None
+        assert self.end.value is not None, self.end
+        return self.end.value.predecessor()
 
     @coerced
     def __lt__(self, other):
@@ -840,7 +861,12 @@ class VersionRange(VersionPredicate['VersionRange']):
            the start position is less than everything except None, and None in
            the end position is greater than everything but None.
         """
+        return self.lowest()
+
         if other is None:
+            return False
+
+        if self in other:
             return False
 
         s, o = self, other
@@ -878,9 +904,14 @@ class VersionRange(VersionPredicate['VersionRange']):
         # if other is None:
         #     return False
 
+        # if self in other:
+        #     return False
+
         # s, o = self, other
         # if s.start > o.start:
         #     return True
+        # if s.start < o.start:
+        #     return False
         # return s.end > o.end
         return not (self == other) and not (self < other)
 
@@ -957,8 +988,6 @@ class VersionRange(VersionPredicate['VersionRange']):
     @coerced
     def overlaps(self, other):
         # type: (VersionRange) -> bool
-        # containment = self._endpoint_containment(other)
-        # return containment.low_contained or containment.high_contained
         return ((self.start <= other.end or
                  other.end in self.start or self.start in other.end) and
                 (other.start <= self.end or
