@@ -1061,7 +1061,8 @@ class GitRepo(object):
 
         The first element of the yielded tuples corresponds to whether the branch was
         HEAD, and the second element is the branch itself."""
-        for line in (self('branch', '--format=%(refname)%(HEAD)', output=str)
+        for line in (self('branch', '--format=%(refname)%(HEAD)',
+                          output=str, fail_on_error=False)
                      .splitlines()):
             if line.startswith('refs/heads/'):
                 ref = GitRef.branch(re.sub(r'^refs/heads/', '', line[:-1]))
@@ -1180,6 +1181,11 @@ class GitRepo(object):
         # type: () -> None
         if self.branches_for():
             return
+        # To set a branch and make a commit without failing, we need to set a user.name
+        # and user.email in this repository's config, in case it's not
+        # configured globally.
+        self('config', 'user.name', 'spack-internal-generated-user')
+        self('config', 'user.email', 'spack-internal-generated-user@example.org')
         # `git branch` will only produce empty output immediately after `git
         # init` is run. In this case, we need to create a single ref guaranteed not to
         # collide with any branch name the user might want to check out, so we generate
