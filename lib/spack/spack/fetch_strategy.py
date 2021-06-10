@@ -801,23 +801,33 @@ class GitRef(object):
     _ref_type = None                            # type: str
     _ref = None                                 # type: str
 
+    @classmethod
+    def known_types(cls):
+        # type: () -> List[str]
+        return cls._known_types
+
+    @property
+    def ref_type(self):
+        # type: () -> str
+        return self._ref_type
+
     def __init__(self, ref_type, ref):
         # type: (str, str) -> None
-        if ref_type not in self._known_types:
+        if ref_type not in self.known_types():
             # This is made a TypeError and not an InvalidGitRef because it cannot arise
             # from invalid user input.
-            raise TypeError('GitRef can only have the types {0}, but was given {1}'
-                            .format(self._known_types, ref_type))
+            raise TypeError('GitRef can only have the types {0}, but was given {1!r}'
+                            .format(self.known_types(), ref_type))
         self._ref_type = ref_type
         if not isinstance(ref, six.string_types):
             # This case can arise from user error when editing package.py files, so we
             # want to catch this and handle it specially to provide more context.
-            raise InvalidGitRef('git reference was not a string: {0}'.format(ref))
+            raise InvalidGitRef('git reference was not a string: {0!r}'.format(ref))
         self._ref = ref
 
     def __repr__(self):
         return '{0}(ref_type={1!r}, ref={2!r})'.format(type(self).__name__,
-                                                       self._ref_type, self._ref)
+                                                       self.ref_type, self._ref)
 
     def __str__(self):
         return '<{0}>'.format(self.repo_info_for_reference())
@@ -835,7 +845,7 @@ class GitRef(object):
         if not cls._commit_rx.match(ref):
             raise InvalidGitRef(dedent("""\
             Spack requires that references to individual git commits be specified via
-            a 7-40 character hexadecimal string, but received the string '{0}' instead.
+            a 7-40 character hexadecimal string, but received {0!r} instead.
 
             A valid commit hash case-insensitively matches the regular expression '{1}'.
             7 hex characters is the size printed out by `git log --format='%h'`, while
@@ -887,40 +897,40 @@ class GitRef(object):
     def refspec(self):
         # type: () -> str
         """Return a string which unambiguously identifies this ref to git."""
-        if self._ref_type == 'commit':
+        if self.ref_type == 'commit':
             return self._ref
-        if self._ref_type == 'tag':
+        if self.ref_type == 'tag':
             return 'refs/tags/{0}'.format(self._ref)
-        assert self._ref_type == 'branch', self
+        assert self.ref_type == 'branch', self
         return 'refs/heads/{0}'.format(self._ref)
 
     def fetch_spec(self):
         # type: () -> str
         """Return an argument to update a local ref from the remote, if applicable."""
-        if self._ref_type == 'commit':
+        if self.ref_type == 'commit':
             # Commits cannot be updated and do not require any special syntax to fetch.
             return self.refspec()
         # Otherwise, we use the syntax to update the local ref from a remote ref of
         # the same name, fetching updates if available/applicable.
-        assert self._ref_type in ['tag', 'branch'], self
+        assert self.ref_type in ['tag', 'branch'], self
         maybe_mutating_prefix = '+' if self.is_mutable() else ''
         return '{0}{1}:{1}'.format(maybe_mutating_prefix, self.refspec())
 
     def is_mutable(self):
         # type: () -> bool
         """Whether this type of git ref should check for updates to that ref."""
-        if self._ref_type == 'branch':
+        if self.ref_type == 'branch':
             return True
-        assert self._ref_type in ['tag', 'commit'], self
+        assert self.ref_type in ['tag', 'commit'], self
         return False
 
     def repo_info_for_reference(self):
         # type: () -> str
-        if self._ref_type == 'commit':
+        if self.ref_type == 'commit':
             return 'at commit {0}'.format(self._ref)
-        if self._ref_type == 'tag':
+        if self.ref_type == 'tag':
             return 'at tag {0}'.format(self._ref)
-        assert self._ref_type == 'branch', self
+        assert self.ref_type == 'branch', self
         return 'on branch {0}'.format(self._ref)
 
 
@@ -1014,7 +1024,8 @@ class ConfiguredGit(object):
 
         This method being `@memoized` means that with the current implementation of
         `Executable.__eq__`, any two `Executable` instances pointing to the same
-        executable file path will return a cached result from this method.
+        executable file path will return a cached result from this method, which will
+        avoid traversing the filesystem.
         """
         version = cls._get_git_version(git)
 

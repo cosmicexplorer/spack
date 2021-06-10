@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
 import copy
+import itertools
 import os
 import re
 
@@ -13,8 +14,9 @@ from llnl.util.filesystem import touch, working_dir
 
 import spack.config
 import spack.repo
-from spack.fetch_strategy import (ConfiguredGit, GitFetchStrategy, GitRef,
-                                  FetcherConflict)
+from spack.fetch_strategy import (ConfiguredGit, GitFetchStageConfiguration,
+                                  GitFetchStrategy, GitRef, FetcherConflict,
+                                  InvalidGitFetchStageConfig, InvalidGitRef)
 from spack.spec import Spec
 from spack.stage import Stage
 from spack.version import ver
@@ -298,35 +300,130 @@ def test_gitsubmodules_delete(mock_git_repository, config, mutable_mock_repo):
         assert not os.path.isdir(file_path)
 
 
-def test_invalid_git_fetch_strategy_parsing():
-    """Trigger a FetcherConflict when parsing version() is ambiguous or malformed."""
-    # Does not raise.
-    _ = GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
-                         submodules=True, submodules_delete=['something'],
-                         get_full_repo=True)
-    _ = GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
-                         submodules=False, submodules_delete=None,
-                         get_full_repo=False)
-    _ = GitFetchStrategy(git='file:///not-a-real-git-repo', version_name='master',
-                         submodules=False, submodules_delete=None,
-                         get_full_repo=False)
-    # Raises for invalid version() specifications.
-    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
-        GitFetchStrategy(git='file:///not-a-real-git-repo')
-    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
-        GitFetchStrategy(git='file:///not-a-real-git-repo', tag='asdf', branch='fdsa')
-    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
-        GitFetchStrategy(git='file:///not-a-real-git-repo', commit='asdf', tag='fdsa')
-    with pytest.raises(FetcherConflict, match=r"Exactly one of commit, tag, or branch"):
-        GitFetchStrategy(git='file:///not-a-real-git-repo', tag='asdf', branch='fdsa')
-    # Raises for invalid information on how to prepare the checkout for the spack stage.
-    with pytest.raises(FetcherConflict, match=r"submodules=.*must be a bool"):
-        GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
-                         submodules='True')
-    with pytest.raises(FetcherConflict,
-                       match=r"submodules_delete=.*must be a list of str"):
-        GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
-                         submodules_delete='something')
-    with pytest.raises(FetcherConflict, match=r"get_full_repo=.*must be a bool"):
-        GitFetchStrategy(git='file:///not-a-real-git-repo', branch='master',
-                         get_full_repo='True')
+class TestGitRef(object):
+    """Trigger an error when a GitRef is constructed incorrectly."""
+
+    def test_parsing_invalid_type(self):
+        with pytest.raises(TypeError, match="can only have the types.*given 'asdf'"):
+            GitRef('asdf', '<anything>')
+
+    @pytest.mark.parametrize('ref_type', GitRef.known_types())
+    def test_parsing_non_string_value(self, ref_type):
+        with pytest.raises(InvalidGitRef, match="was not a string: 2"):
+            GitRef(ref_type, 2)
+
+    @pytest.mark.parametrize('allowable_hash_length', [7, 10, 32, 40])
+    def test_allowable_hash_length(self, allowable_hash_length):
+        allowable_hash = 'a' * allowable_hash_length
+        _ = GitRef.commit(allowable_hash)
+
+    @pytest.mark.parametrize('incorrect_hash_length', [5, 42])
+    def test_invalid_hash_length(self, incorrect_hash_length):
+        bad_hash = 'a' * incorrect_hash_length
+        err_rx = ("7-40 character hexadecimal string, but received {0!r} instead"
+                  .format(bad_hash))
+        with pytest.raises(InvalidGitRef, match=err_rx):
+            GitRef.commit(bad_hash)
+
+    @pytest.mark.parametrize('bad_hash', ['atwwes73'])
+    def test_invalid_hash_string_content(self, bad_hash):
+        err_rx = ("7-40 character hexadecimal string, but received {0!r} instead"
+                  .format(bad_hash))
+        with pytest.raises(InvalidGitRef, match=err_rx):
+            GitRef.commit(bad_hash)
+
+    def test_parsing_empty_version_directive(self):
+        err_rx = "Exactly one of(.|\n)+commit=None(.|\n)+tag=None(.|\n)+branch=None"
+        with pytest.raises(InvalidGitRef, match=err_rx):
+            GitRef.from_version_directive(dict())
+
+    def test_parsing_version_name_only(self):
+        version_name_only = GitRef.from_version_directive(dict(version_name='asdf'))
+        assert version_name_only.ref_type == 'branch'
+        assert version_name_only.refspec() == 'refs/heads/asdf'
+
+    _VALID_INDIVIDUAL_ARGS = dict(tag='asdf', branch='fdsa', commit='a' * 7)
+
+    @pytest.mark.parametrize('ref_type,ref_name', _VALID_INDIVIDUAL_ARGS.items())
+    def test_successfully_parsing_version_directive(self, ref_type, ref_name):
+        ref = GitRef.from_version_directive({ref_type: ref_name})
+        assert ref.ref_type == ref_type
+        assert ref.refspec().endswith(ref_name), ref
+
+    @pytest.mark.parametrize(
+        'arg1,arg2',
+        list(itertools.permutations(_VALID_INDIVIDUAL_ARGS.items(),
+                                    r=2)))
+    def test_mutually_exclusive_kwargs_error(self, arg1, arg2):
+        mutually_exclusive_kwargs = dict([arg1, arg2])
+        with pytest.raises(InvalidGitRef,
+                           match="Exactly one of.*must be specified"):
+            GitRef.from_version_directive(mutually_exclusive_kwargs)
+
+
+class TestGitFetchStageConfiguration(object):
+    """Trigger an error when a GitFetchStageConfiguration is constructed incorrectly."""
+
+    @pytest.mark.parametrize('kwargs', [
+        {},
+        dict(submodules=True,
+             submodules_delete=['something'],
+             get_full_repo=True),
+        dict(submodules=False,
+             submodules_delete=None,
+             get_full_repo=False),
+    ])
+    def test_successful_parsing_of_version_directive(self, kwargs):
+        _ = GitFetchStageConfiguration.from_version_directive(kwargs)
+
+    @pytest.mark.parametrize('kwargs', [
+        dict(submodules='True'),
+        dict(submodules='False'),
+        dict(submodules_delete='asdf'),
+        dict(get_full_repo='True'),
+        dict(get_full_repo='False'),
+    ])
+    def test_failed_parsing_of_version_directive(self, kwargs):
+        with pytest.raises(InvalidGitFetchStageConfig):
+            GitFetchStageConfiguration.from_version_directive(kwargs)
+
+
+class TestGitFetchStrategy(object):
+    """Trigger a FetcherConflict when a parsed version() is ambiguous or malformed."""
+
+    @pytest.mark.parametrize('kwargs', [
+        dict(git='file:///not-a-real-git-repo', branch='master',
+             submodules=True, submodules_delete=['something'], get_full_repo=True),
+        dict(git='file:///not-a-real-git-repo', branch='master',
+             submodules=False, submodules_delete=None, get_full_repo=False),
+        dict(git='file:///not-a-real-git-repo', version_name='master',
+             submodules=False, submodules_delete=None, get_full_repo=False),
+    ])
+    def test_successful_parsing(self, kwargs):
+        _ = GitFetchStrategy(**kwargs)
+
+    @pytest.mark.parametrize('kwargs', [
+        dict(git='file:///not-a-real-git-repo'),
+        dict(git='file:///not-a-real-git-repo', tag='asdf', branch='fdsa'),
+        dict(git='file:///not-a-real-git-repo', commit='asdf', tag='fdsa'),
+        dict(git='file:///not-a-real-git-repo', tag='asdf', branch='fdsa'),
+    ])
+    def test_raises_on_invalid_ref(self, kwargs):
+        """Raises for invalid version() specifications."""
+        with pytest.raises(FetcherConflict,
+                           match=r"Exactly one of commit, tag, or branch"):
+            GitFetchStrategy(**kwargs)
+
+    @pytest.mark.parametrize('kwargs,err_rx', [
+        (dict(git='file:///not-a-real-git-repo', branch='master', submodules='True'),
+         "submodules=.*must be a bool"),
+        (dict(git='file:///not-a-real-git-repo', branch='master',
+              submodules_delete='something'),
+         "submodules_delete=.*must be a list of str"),
+        (dict(git='file:///not-a-real-git-repo', branch='master', get_full_repo='True'),
+         "get_full_repo=.*must be a bool"),
+    ])
+    def test_raises_on_invalid_stage_config(self, kwargs, err_rx):
+        """Raises for invalid info to prepare the checkout for the spack stage."""
+        with pytest.raises(FetcherConflict, match=err_rx):
+            GitFetchStrategy(**kwargs)
