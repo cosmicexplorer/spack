@@ -972,9 +972,11 @@ class GitFetchStageConfiguration(object):
                     .format(submodules_delete))
             get_full_repo = cls._extract_bool(kwargs, 'get_full_repo', False)
         except InvalidGitFetchStageConfig as e:
-            raise InvalidGitFetchStageConfig(
-                'failed to parse {0} from kwargs {1}: {2}'
-                .format(cls.__name__, kwargs, e))
+            raise six.raise_from(
+                InvalidGitFetchStageConfig(
+                    'failed to parse {0} from kwargs {1}: {2}'
+                    .format(cls.__name__, kwargs, e)),
+                e)
         return cls(submodules=submodules,
                    submodules_delete=submodules_delete,
                    get_full_repo=get_full_repo)
@@ -1135,7 +1137,7 @@ class GitRepo(object):
             fetch_args = args + (remote_url, ref.fetch_spec())
             self(*fetch_args)
         except ProcessError as e:
-            raise FailedGitFetch(remote_url, ref, self, e)
+            raise six.raise_from(FailedGitFetch(remote_url, ref, self, e), e)
 
     def add_worktree(self, worktree_path, refspec, prune=True):
         # type: (str, str, bool) -> GitRepo
@@ -1257,16 +1259,21 @@ class GitFetchStrategy(VCSFetchStrategy):
             self.stage_config = (
                 GitFetchStageConfiguration.from_version_directive(kwargs))
         except InvalidGitFetchStageConfig as e:
-            raise FetcherConflict(
-                'Failed to parse git fetch stage config '
-                'from the version() arguments {0}:\n\n{1}'.format(kwargs, e))
+            raise six.raise_from(
+                FetcherConflict(
+                    'Failed to parse git fetch stage config '
+                    'from the version() arguments {0}:\n\n{1}'.format(kwargs, e)),
+                e)
 
         try:
             self.ref = GitRef.from_version_directive(kwargs)
         except InvalidGitRef as e:
-            raise FetcherConflict(
-                'Failed to identity an unambiguous refspec (commit, tag, or branch) '
-                'from the version() arguments {0}:\n\n{1}'.format(kwargs, e))
+            raise six.raise_from(
+                FetcherConflict(
+                    'Failed to identity an unambiguous refspec '
+                    '(commit, tag, or branch) '
+                    'from the version() arguments {0}:\n\n{1}'.format(kwargs, e)),
+                e)
 
     @property                   # type: ignore[misc]
     @memoized
@@ -1733,10 +1740,11 @@ class S3FetchStrategy(URLFetchStrategy):
     def __init__(self, *args, **kwargs):
         try:
             super(S3FetchStrategy, self).__init__(*args, **kwargs)
-        except ValueError:
+        except ValueError as e:
             if not kwargs.get('url'):
-                raise ValueError(
-                    "S3FetchStrategy requires a url for fetching.")
+                raise six.raise_from(
+                    ValueError("S3FetchStrategy requires a url for fetching."),
+                    e)
 
     @_needs_stage
     def fetch(self):
@@ -1861,10 +1869,10 @@ def _extrapolate(pkg, version):
     try:
         return URLFetchStrategy(pkg.url_for_version(version),
                                 fetch_options=pkg.fetch_options)
-    except spack.package.NoURLError:
+    except spack.package.NoURLError as e:
         msg = ("Can't extrapolate a URL for version %s "
                "because package %s defines no URLs")
-        raise ExtrapolationError(msg % (version, pkg.name))
+        raise six.raise_from(ExtrapolationError(msg % (version, pkg.name)), e)
 
 
 def _from_merged_attrs(fetcher, pkg, version):

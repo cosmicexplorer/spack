@@ -310,7 +310,7 @@ class TestGitRef(object):
     @pytest.mark.parametrize('ref_type', GitRef.known_types())
     def test_parsing_non_string_value(self, ref_type):
         with pytest.raises(InvalidGitRef, match="was not a string: 2"):
-            GitRef(ref_type, 2)
+            getattr(GitRef, ref_type)(2)
 
     @pytest.mark.parametrize('allowable_hash_length', [7, 10, 32, 40])
     def test_allowable_hash_length(self, allowable_hash_length):
