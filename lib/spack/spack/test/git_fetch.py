@@ -14,12 +14,17 @@ from llnl.util.filesystem import touch, working_dir
 
 import spack.config
 import spack.repo
-from spack.fetch_strategy import (ConfiguredGit, GitFetchStageConfiguration,
-                                  GitFetchStrategy, GitRef, FetcherConflict,
-                                  InvalidGitFetchStageConfig, InvalidGitRef)
+from spack.fetch_strategy import (
+    ConfiguredGit,
+    FetcherConflict,
+    GitFetchStageConfiguration,
+    GitFetchStrategy,
+    GitRef,
+    InvalidGitFetchStageConfig,
+    InvalidGitRef,
+)
 from spack.spec import Spec
 from spack.stage import Stage
-from spack.version import ver
 from spack.util.executable import which
 from spack.version import ver
 
