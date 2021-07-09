@@ -12,6 +12,8 @@ import string
 
 from six import StringIO
 
+from llnl.util.lang import memoized
+
 import spack.error
 
 __all__ = [
@@ -26,12 +28,24 @@ __all__ = [
     'NamespaceTrie']
 
 # Valid module names can contain '-' but can't start with it.
-_valid_module_re = r'^\w[\w-]*$'
+_valid_module_re = re.compile(r'^\w[\w-]*$')
 
 # Valid module names can contain '-' but can't start with it.
-_valid_fully_qualified_module_re = r'^(\w[\w-]*)(\.\w[\w-]*)*$'
+_valid_fully_qualified_module_re = re.compile(r'^(\w[\w-]*)(\.\w[\w-]*)*$')
+
+_name_separators = re.compile(r'[-_]+')
+
+_starts_with_number = re.compile(r'^[0-9]')
+_just_number = re.compile(r'[0-9]')
+
+_num_name = re.compile(r'^num(\d)')
+_name_split = re.compile(r'(_)')
+
+_lua_name = re.compile('^(lua)([^-])')
+_bpp_name = re.compile('^(bpp)([^-])')
 
 
+@memoized
 def mod_to_class(mod_name):
     """Convert a name from module style to class name style.  Spack mostly
        follows `PEP-8 <http://legacy.python.org/dev/peps/pep-0008/>`_:
@@ -53,13 +67,13 @@ def mod_to_class(mod_name):
     """
     validate_module_name(mod_name)
 
-    class_name = re.sub(r'[-_]+', '-', mod_name)
+    class_name = _name_separators.sub('-', mod_name)
     class_name = string.capwords(class_name, '-')
     class_name = class_name.replace('-', '')
 
     # If a class starts with a number, prefix it with Number_ to make it
     # a valid Python class name.
-    if re.match(r'^[0-9]', class_name):
+    if _starts_with_number.match(class_name):
         class_name = "_%s" % class_name
 
     return class_name
@@ -69,7 +83,7 @@ def spack_module_to_python_module(mod_name):
     """Given a Spack module name, returns the name by which it can be
        imported in Python.
     """
-    if re.match(r'[0-9]', mod_name):
+    if _just_number.match(mod_name):
         mod_name = 'num' + mod_name
 
     return mod_name.replace('-', '_')
@@ -78,9 +92,9 @@ def spack_module_to_python_module(mod_name):
 def possible_spack_module_names(python_mod_name):
     """Given a Python module name, return a list of all possible spack module
        names that could correspond to it."""
-    mod_name = re.sub(r'^num(\d)', r'\1', python_mod_name)
+    mod_name = _num_name.sub(r'\1', python_mod_name)
 
-    parts = re.split(r'(_)', mod_name)
+    parts = _name_split.split(mod_name)
     options = [['_', '-']] * mod_name.count('_')
 
     results = []
@@ -132,22 +146,22 @@ def simplify_name(name):
 
     # Simplify Lua package names
     # We don't want "lua" to occur multiple times in the name
-    name = re.sub('^(lua)([^-])', r'\1-\2', name)
+    name = _lua_name.sub(r'\1-\2', name)
 
     # Simplify Bio++ package names
-    name = re.sub('^(bpp)([^-])', r'\1-\2', name)
+    name = _bpp_name.sub(r'\1-\2', name)
 
     return name
 
 
 def valid_module_name(mod_name):
     """Return whether mod_name is valid for use in Spack."""
-    return bool(re.match(_valid_module_re, mod_name))
+    return bool(_valid_module_re.match(mod_name))
 
 
 def valid_fully_qualified_module_name(mod_name):
     """Return whether mod_name is a valid namespaced module name."""
-    return bool(re.match(_valid_fully_qualified_module_re, mod_name))
+    return bool(_valid_fully_qualified_module_re.match(mod_name))
 
 
 def validate_module_name(mod_name):
