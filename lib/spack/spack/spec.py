@@ -170,7 +170,14 @@ color_formats = {'%': compiler_color,
 #: Regex used for splitting by spec field separators.
 #: These need to be escaped to avoid metacharacters in
 #: ``color_formats.keys()``.
-_separators = '[\\%s]' % '\\'.join(color_formats.keys())
+_separators = re.compile('[\\%s]' % '\\'.join(color_formats.keys()))
+
+_query_parameters = re.compile(r'\s*,\s*')
+
+_cash_sigil = re.compile(r'[^\\]*\$')
+
+_dag_hash_sigil_end = re.compile(r'hash(:\d+)?$')
+_dag_hash_sigil = re.compile(r'hash(:\d)?')
 
 #: Versionlist constant so we don't have to build a list
 #: every time we call str()
@@ -198,7 +205,7 @@ def colorize_spec(spec):
 
             return '%s%s' % (color_formats[sep], clr.cescape(sep))
 
-    return clr.colorize(re.sub(_separators, insert_color(), str(spec)) + '@.')
+    return clr.colorize(_separators.sub(insert_color(), str(spec)) + '@.')
 
 
 @lang.lazy_lexicographic_ordering
@@ -3584,7 +3591,7 @@ class Spec(object):
             # We have extra query parameters, which are comma separated
             # values
             csv = query_parameters.pop().strip()
-            query_parameters = re.split(r'\s*,\s*', csv)
+            query_parameters = _query_parameters.split(csv)
 
         try:
             value = next(
@@ -3774,7 +3781,7 @@ class Spec(object):
 
         """
         # If we have an unescaped $ sigil, use the deprecated format strings
-        if re.search(r'[^\\]*\$', format_string):
+        if _cash_sigil.search(format_string):
             return self.old_format(format_string, **kwargs)
 
         color = kwargs.get('color', False)
@@ -3817,7 +3824,7 @@ class Spec(object):
                 raise SpecFormatSigilError(sig, 'versions', attribute)
             elif sig == '%' and attribute not in ('compiler', 'compiler.name'):
                 raise SpecFormatSigilError(sig, 'compilers', attribute)
-            elif sig == '/' and not re.match(r'hash(:\d+)?$', attribute):
+            elif sig == '/' and not _dag_hash_sigil_end.match(attribute):
                 raise SpecFormatSigilError(sig, 'DAG hashes', attribute)
             elif sig == ' arch=' and attribute not in ('architecture', 'arch'):
                 raise SpecFormatSigilError(sig, 'the architecture', attribute)
@@ -3833,7 +3840,7 @@ class Spec(object):
             elif attribute == 'spack_install':
                 write(morph(spec, spack.store.layout.root))
                 return
-            elif re.match(r'hash(:\d)?', attribute):
+            elif _dag_hash_sigil.match(attribute):
                 col = '#'
                 if ':' in attribute:
                     _, length = attribute.split(':')
