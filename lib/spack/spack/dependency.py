@@ -112,6 +112,11 @@ class Dependency(object):
             self.type = set(type)
 
     @property
+    def is_test_only(self):
+        # type: () -> bool
+        return ('test' in self.type) and len(self.type) == 1
+
+    @property
     def name(self):
         """Get the name of the dependency package."""
         return self.spec.name

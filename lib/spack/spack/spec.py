@@ -2915,12 +2915,9 @@ class Spec(object):
 
                 # If dep is a needed dependency, merge it.
                 if dep:
-                    merge = (
-                        # caller requested test dependencies
-                        tests is True or (tests and self.name in tests) or
-                        # this is not a test-only dependency
-                        dep.type - set(['test']))
-
+                    # FIXME: this code only considers 'test'-type dependencies, butt it
+                    # seems to be expecting a more general treatment?
+                    merge = tests or not dep.is_test_only
                     if merge:
                         changed |= self._merge_dependency(
                             dep, visited, spec_deps, provider_index, tests)
@@ -2988,6 +2985,9 @@ class Spec(object):
         # traverse the package DAG and fill out dependencies according
         # to package files & their 'when' specs
         visited = set()
+
+        # caller requested test dependencies
+        tests = (tests is True) or (tests and self.name in tests)
 
         any_change = self._normalize_helper(
             visited, all_spec_deps, provider_index, tests)
