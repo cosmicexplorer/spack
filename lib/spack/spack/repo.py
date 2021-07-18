@@ -212,11 +212,17 @@ class FastPackageChecker(Mapping):
     def __getitem__(self, item):
         return self._packages_to_stats[item]
 
+    def __contains__(self, item):
+        return item in self._packages_to_stats
+
     def __iter__(self):
         return iter(self._packages_to_stats)
 
     def __len__(self):
         return len(self._packages_to_stats)
+
+    def __bool__(self):
+        return bool(self._packages_to_stats)
 
 
 class TagIndex(Mapping):
@@ -1074,8 +1080,8 @@ class Repo(object):
             return False
 
         # if the FastPackageChecker is already constructed, use it
-        if self._fast_package_checker:
-            return pkg_name in self._pkg_checker
+        if self._fast_package_checker is not None:
+            return pkg_name in self._fast_package_checker
 
         # if not, check for the package.py file
         path = self.filename_for_package_name(pkg_name)
