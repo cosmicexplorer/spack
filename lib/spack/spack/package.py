@@ -2732,7 +2732,7 @@ def possible_dependencies(*pkg_or_spec, **kwargs):
             packages.append(pos)
             continue
 
-        if not isinstance(pos, spack.spec.Spec):
+        if not isinstance(pos, (spack.spec.Spec, spack.spec.CowSpec)):
             pos = spack.spec.Spec(pos)
 
         if spack.repo.path.is_virtual(pos.name):

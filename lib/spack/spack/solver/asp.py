@@ -72,7 +72,7 @@ def packagize(pkg):
 
 
 def specify(spec):
-    if isinstance(spec, spack.spec.Spec):
+    if isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec)):
         return spec
     return spack.spec.Spec(spec)
 

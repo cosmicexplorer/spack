@@ -6,7 +6,7 @@ from six import iteritems
 
 
 class Rust(Package):
-    """The Rust programming language toolchain
+    """The Rust programming language toolchain.
 
     This package can bootstrap any version of the Rust compiler since Rust
     1.23. It does this by downloading the platform-appropriate binary

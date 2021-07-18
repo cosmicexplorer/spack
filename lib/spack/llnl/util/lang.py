@@ -11,8 +11,11 @@ import multiprocessing
 import os
 import re
 import sys
+import types
+from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
 
+import six
 from six import string_types
 
 if sys.version_info < (3, 0):
@@ -200,13 +203,8 @@ def memoized(func):
 
     @functools.wraps(func)
     def _memoized_function(*args):
-        if not isinstance(args, Hashable):
-            # Not hashable, so just call the function.
-            return func(*args)
-
         if args not in func.cache:
             func.cache[args] = func(*args)
-
         return func.cache[args]
 
     return _memoized_function
@@ -262,9 +260,15 @@ def decorator_with_or_without_args(decorator):
 done = object()
 
 
+@memoized
 def tuplify(seq):
     """Helper for lazy_lexicographic_ordering()."""
-    return tuple((tuplify(x) if callable(x) else x) for x in seq())
+    return _tuplify_helper(tuple(seq()))
+
+
+@memoized
+def _tuplify_helper(seq):
+    return tuple((tuplify(x) if callable(x) else x) for x in seq)
 
 
 def lazy_eq(lseq, rseq):
@@ -320,7 +324,7 @@ def lazy_lt(lseq, rseq):
 
 
 @decorator_with_or_without_args
-def lazy_lexicographic_ordering(cls, set_hash=True):
+def lazy_lexicographic_ordering(cls, set_hash=True, cache_iter=False):
     """Decorates a class with extra methods that implement rich comparison.
 
     This is a lazy version of the tuple comparison used frequently to
@@ -346,7 +350,7 @@ def lazy_lexicographic_ordering(cls, set_hash=True):
 
     Python would compare ``Widgets`` lexicographically based on their
     tuples. The issue there for simple comparators is that we have to
-    bulid the tuples *and* we have to generate all the values in them up
+    build the tuples *and* we have to generate all the values in them up
     front. When implementing comparisons for large data structures, this
     can be costly.
 
@@ -396,45 +400,103 @@ def lazy_lexicographic_ordering(cls, set_hash=True):
     if not has_method(cls, "_cmp_iter"):
         raise TypeError("'%s' doesn't define _cmp_iter()." % cls.__name__)
 
-    # comparison operators are implemented in terms of lazy_eq and lazy_lt
-    def eq(self, other):
-        if self is other:
-            return True
-        return (other is not None) and lazy_eq(self._cmp_iter, other._cmp_iter)
-
-    def lt(self, other):
-        if self is other:
-            return False
-        return (other is not None) and lazy_lt(self._cmp_iter, other._cmp_iter)
-
-    def ne(self, other):
-        if self is other:
-            return False
-        return (other is None) or not lazy_eq(self._cmp_iter, other._cmp_iter)
-
-    def gt(self, other):
-        if self is other:
-            return False
-        return (other is None) or lazy_lt(other._cmp_iter, self._cmp_iter)
-
-    def le(self, other):
-        if self is other:
-            return True
-        return (other is not None) and not lazy_lt(other._cmp_iter,
-                                                   self._cmp_iter)
-
-    def ge(self, other):
-        if self is other:
-            return True
-        return (other is None) or not lazy_lt(self._cmp_iter, other._cmp_iter)
-
-    def h(self):
-        return hash(tuplify(self._cmp_iter))
-
     def add_func_to_class(name, func):
         """Add a function to a class with a particular name."""
         func.__name__ = name
         setattr(cls, name, func)
+
+    if cache_iter:
+        @memoized
+        def cmp_tup(self):
+            return list(self._cmp_iter())
+
+        add_func_to_class("_cmp_tup", cmp_tup)
+
+        def eq(self, other):
+            if self is other:
+                return True
+            if other is None:
+                return False
+            return self._cmp_tup() == other._cmp_tup()
+
+        def lt(self, other):
+            if self is other:
+                return False
+            if other is None:
+                return False
+            return self._cmp_tup() < other._cmp_tup()
+
+        def ne(self, other):
+            if self is other:
+                return False
+            if other is None:
+                return True
+            return self._cmp_tup() != other._cmp_tup()
+
+        def gt(self, other):
+            if self is other:
+                return False
+            if other is None:
+                return True
+            return self._cmp_tup() > other._cmp_tup()
+
+        def le(self, other):
+            if self is other:
+                return True
+            if other is None:
+                return False
+            return self._cmp_tup() <= other._cmp_tup()
+
+        def ge(self, other):
+            if self is other:
+                return True
+            if other is None:
+                return True
+            return self._cmp_tup() >= other._cmp_tup()
+
+        @memoized
+        def h(self):
+            return hash(self._cmp_tup())
+    else:
+        # comparison operators are implemented in terms of lazy_eq and lazy_lt
+        def eq(self, other):
+            if self is other:
+                return True
+            return ((other is not None) and
+                    lazy_eq(self._cmp_iter, other._cmp_iter))
+
+        def lt(self, other):
+            if self is other:
+                return False
+            return ((other is not None) and
+                    lazy_lt(self._cmp_iter, other._cmp_iter))
+
+        def ne(self, other):
+            if self is other:
+                return False
+            return ((other is None) or
+                    not lazy_eq(self._cmp_iter, other._cmp_iter))
+
+        def gt(self, other):
+            if self is other:
+                return False
+            return ((other is None) or
+                    lazy_lt(other._cmp_iter, self._cmp_iter))
+
+        def le(self, other):
+            if self is other:
+                return True
+            return ((other is not None) and
+                    not lazy_lt(other._cmp_iter, self._cmp_iter))
+
+        def ge(self, other):
+            if self is other:
+                return True
+            return ((other is None) or
+                    not lazy_lt(self._cmp_iter, other._cmp_iter))
+
+        def h(self):
+            return hash(tuplify(self._cmp_iter))
 
     add_func_to_class("__eq__", eq)
     add_func_to_class("__ne__", ne)
@@ -446,6 +508,67 @@ def lazy_lexicographic_ordering(cls, set_hash=True):
         add_func_to_class("__hash__", h)
 
     return cls
+
+
+class SentinelValueDecorator(object):
+    def __init__(self, field_name, decorated):
+        self._field_name = field_name
+        self._decorated = decorated
+
+    def mark_instance(self, obj):
+        setattr(obj, self._field_name, True)
+        return obj
+
+    def is_instance(self, obj):
+        return getattr(obj, self._field_name, False)
+
+    def __call__(self, *args, **kwargs):
+        return self._decorated(*args, **kwargs)
+
+
+def sentinel_value_decorator(field_name):
+    assert isinstance(field_name, six.string_types), field_name
+    def outer(decorated):
+        inner = SentinelValueDecorator(field_name, decorated)
+        return functools.wraps(decorated)(inner)
+    return outer
+
+
+@sentinel_value_decorator('_mutating')
+def mutating(f):
+    assert isinstance(f, types.FunctionType), f
+    return mutating.mark_instance(f)
+
+
+def cow(cls):
+
+    class Wrapped(object):
+        def __init__(self, base):
+            self._base = base
+            self._copied = None
+
+        def __getattr__(self, name):
+            # (1) If we refer  to our own attributes, do not forward.
+            if name in ['__init__', '_base', '_copied']:
+                return object.__getattribute__(self, name)
+            # (2) If we have already copied, use that object.
+            if self._copied is not None:
+                return getattr(self._copied, name)
+            # (3) Check if the attribute is defined on the type.
+            attr_value = getattr(type(self._base), name, None)
+            if attr_value is None:
+                # If not, then it is an instance field, and we forward.
+                return getattr(self._base, name)
+            # (4) If the attribute is defined on the type, and it is marked as
+            #     "mutating", then we perform the copy just once.
+            if mutating.is_instance(attr_value):
+                self._copied = self._base.copy()
+                assert self._copied is not None
+                return getattr(self._copied, name)
+            # (5) If it's non-mutating, then just apply to the base instance.
+            return getattr(self._base, name)
+
+    return Wrapped
 
 
 @lazy_lexicographic_ordering

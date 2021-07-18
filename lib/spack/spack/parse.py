@@ -10,6 +10,8 @@ import sys
 
 from six import string_types
 
+import llnl.util.tty as tty
+
 import spack.error
 
 

@@ -87,7 +87,7 @@ def autospec(function):
     """
     @functools.wraps(function)
     def converter(self, spec_like, *args, **kwargs):
-        if not isinstance(spec_like, spack.spec.Spec):
+        if not isinstance(spec_like, (spack.spec.Spec, spack.spec.CowSpec)):
             spec_like = spack.spec.Spec(spec_like)
         return function(self, spec_like, *args, **kwargs)
     return converter
@@ -650,7 +650,7 @@ class RepoPath(object):
         # We don't @_autospec this function b/c it's called very frequently
         # and we want to avoid parsing str's into Specs unnecessarily.
         namespace = None
-        if isinstance(spec, spack.spec.Spec):
+        if isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec)):
             namespace = spec.namespace
             name = spec.name
         else:

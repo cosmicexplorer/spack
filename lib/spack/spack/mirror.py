@@ -430,7 +430,7 @@ def create(path, specs, skip_unstable_versions=False):
 
     # automatically spec-ify anything in the specs array.
     specs = [
-        s if isinstance(s, spack.spec.Spec) else spack.spec.Spec(s)
+        s if isinstance(s, (spack.spec.Spec, spack.spec.CowSpec)) else spack.spec.Spec(s)
         for s in specs]
 
     # Get the absolute path of the root before we start jumping around.

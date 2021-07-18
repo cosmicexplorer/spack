@@ -1030,6 +1030,38 @@ class Spec(object):
     #: Cache for spec's prefix, computed lazily in the corresponding property
     _prefix = None
 
+    # FIXME: use LazySpecCache here!!
+    _cached_instances = {}
+
+    @classmethod
+    def _new_basic(cls):
+        return super(Spec, cls).__new__(cls)
+
+    def __new__(cls, *args, **kwargs):
+        if not kwargs:
+            if not args:
+                # If no args, then return an empty spec.
+                ret = cls._new_basic()
+                cls.__init__(ret)
+                return ret
+            if (len(args) == 1):
+                (spec,) = args
+                if isinstance(spec, CowSpec):
+                    return spec
+                if isinstance(spec, Spec):
+                    # Copy if args[0] is a Spec.
+                    return CowSpec(spec)
+
+        sorted_key_names = sorted(kwargs.keys())
+        linear_kwargs = tuple((k, kwargs[k]) for k in sorted_key_names)
+        key = args + linear_kwargs
+
+        if key not in cls._cached_instances:
+            basic = cls._new_basic()
+            cls.__init__(basic, *args, **kwargs)
+            cls._cached_instances[key] = basic
+        return CowSpec(cls._cached_instances[key])
+
     def __init__(self, spec_like=None,
                  normal=False, concrete=False, external_path=None,
                  external_modules=None, full_hash=None):
@@ -1166,6 +1198,7 @@ class Spec(object):
     #
     # Private routines here are called by the parser when building a spec.
     #
+    @lang.mutating
     def _add_versions(self, version_list):
         """Called by the parser to add an allowable version."""
         # If it already has a non-trivial version list, this is an error
@@ -1177,6 +1210,7 @@ class Spec(object):
         for version in version_list:
             self.versions.add(version)
 
+    @lang.mutating
     def _add_flag(self, name, value):
         """Called by the parser to add a known flag.
         Known flags currently include "arch"
@@ -1205,6 +1239,7 @@ class Spec(object):
             else:
                 self.variants[name] = vt.AbstractVariant(name, value)
 
+    @lang.mutating
     def _set_architecture(self, **kwargs):
         """Called by the parser to set the architecture."""
         arch_attrs = ['platform', 'os', 'target']
@@ -1226,6 +1261,7 @@ class Spec(object):
                 else:
                     setattr(self.architecture, new_attr, new_value)
 
+    @lang.mutating
     def _set_compiler(self, compiler):
         """Called by the parser to set the compiler."""
         if self.compiler:
@@ -1233,6 +1269,7 @@ class Spec(object):
                 "Spec for '%s' cannot have two compilers." % self.name)
         self.compiler = compiler
 
+    @lang.mutating
     def _add_dependency(self, spec, deptypes):
         """Called by the parser to add another spec as a dependency."""
         if spec.name in self._dependencies:
@@ -1244,6 +1281,7 @@ class Spec(object):
         self._dependencies[spec.name] = dspec
         spec._dependents[self.name] = dspec
 
+    @lang.mutating
     def _add_default_platform(self):
         """If a spec has an os or a target and no platform, give it
            the default platform.
@@ -1490,6 +1528,7 @@ class Spec(object):
         return self._prefix
 
     @prefix.setter
+    @lang.mutating
     def prefix(self, value):
         self._prefix = spack.util.prefix.Prefix(value)
 
@@ -1505,6 +1544,7 @@ class Spec(object):
         yaml_text = syaml.dump(node_dict, default_flow_style=True)
         return spack.util.hash.b32_hash(yaml_text)
 
+    @lang.mutating
     def _cached_hash(self, hash, length=None):
         """Helper function for storing a cached hash on the spec.
 
@@ -2011,7 +2051,7 @@ class Spec(object):
             # If the requirements was for unique nodes (default)
             # then re-use keys from the local cache. Otherwise build
             # a new node every time.
-            if not isinstance(spec_like, Spec):
+            if not isinstance(spec_like, (Spec, CowSpec)):
                 spec = spec_cache[spec_like] if normal else Spec(spec_like)
             else:
                 spec = spec_like
@@ -2051,7 +2091,7 @@ class Spec(object):
                         dependency types
 
                 """
-                if isinstance(s, Spec):
+                if isinstance(s, (Spec, CowSpec)):
                     return s, ()
 
                 spec_obj, dtypes = s
@@ -2167,6 +2207,7 @@ class Spec(object):
         )
         validate_fn(self, self.extra_attributes)
 
+    @lang.mutating
     def _concretize_helper(self, concretizer, presets=None, visited=None):
         """Recursive helper function for concretize().
            This concretizes everything bottom-up.  As things are
@@ -2214,6 +2255,7 @@ class Spec(object):
         visited.add(self.name)
         return changed
 
+    @lang.mutating
     def _replace_with(self, concrete):
         """Replace this virtual spec with a concrete spec."""
         assert(self.virtual)
@@ -2229,6 +2271,7 @@ class Spec(object):
             if concrete.name not in dependent._dependencies:
                 dependent._add_dependency(concrete, deptypes)
 
+    @lang.mutating
     def _expand_virtual_packages(self, concretizer):
         """Find virtual packages in this spec, replace them with providers,
            and normalize again to include the provider's (potentially virtual)
@@ -2334,6 +2377,7 @@ class Spec(object):
 
         return changed
 
+    @lang.mutating
     def _old_concretize(self, tests=False):
         """A spec is concrete if it describes one build of a package uniquely.
         This will ensure that this spec is concrete.
@@ -2526,6 +2570,7 @@ class Spec(object):
             msg += "    For each package listed, choose another spec\n"
             raise SpecDeprecatedError(msg)
 
+    @lang.mutating
     def _new_concretize(self, tests=False):
         import spack.solver.asp
 
@@ -2557,6 +2602,7 @@ class Spec(object):
         self._dup(concretized)
         self._mark_concrete()
 
+    @lang.mutating
     def concretize(self, tests=False):
         """Concretize the current spec.
 
@@ -2570,6 +2616,7 @@ class Spec(object):
         else:
             self._old_concretize(tests)
 
+    @lang.mutating
     def _mark_root_concrete(self, value=True):
         """Mark just this spec (not dependencies) concrete."""
         if (not value) and self.concrete and self.package.installed:
@@ -2577,6 +2624,7 @@ class Spec(object):
         self._normal = value
         self._concrete = value
 
+    @lang.mutating
     def _mark_concrete(self, value=True):
         """Mark this spec and its dependencies as concrete.
 
@@ -2732,6 +2780,7 @@ class Spec(object):
             elif required:
                 raise UnsatisfiableProviderSpecError(required[0], vdep)
 
+    @lang.mutating
     def _merge_dependency(
             self, dependency, visited, spec_deps, provider_index, tests):
         """Merge dependency information from a Package into this Spec.
@@ -2805,8 +2854,9 @@ class Spec(object):
         else:
             # merge package/vdep information into spec
             try:
-                tty.debug(
-                    "{0} applying constraint {1}".format(self.name, str(dep)))
+                # FIXME: This stringification is very slow!
+                # tty.debug(
+                #     "{0} applying constraint {1}".format(self.name, str(dep)))
                 changed |= spec_deps[dep.name].constrain(dep)
             except spack.error.UnsatisfiableSpecError as e:
                 fmt = 'An unsatisfiable {0}'.format(e.constraint_type)
@@ -2834,6 +2884,7 @@ class Spec(object):
             visited, spec_deps, provider_index, tests)
         return changed
 
+    @lang.mutating
     def _normalize_helper(self, visited, spec_deps, provider_index, tests):
         """Recursive helper function for _normalize."""
         if self.name in visited:
@@ -2877,6 +2928,7 @@ class Spec(object):
 
         return any_change
 
+    @lang.mutating
     def normalize(self, force=False, tests=False, user_spec_deps=None):
         """When specs are parsed, any dependencies specified are hanging off
            the root, and ONLY the ones that were explicitly provided are there.
@@ -2994,6 +3046,7 @@ class Spec(object):
         if not_existing:
             raise vt.UnknownVariantError(spec, not_existing)
 
+    @lang.mutating
     def update_variant_validate(self, variant_name, values):
         """If it is not already there, adds the variant named
         `variant_name` to the spec `spec` based on the definition
@@ -3028,6 +3081,7 @@ class Spec(object):
         pkg_variant.validate_or_raise(
             self.variants[variant_name], self.package)
 
+    @lang.mutating
     def constrain(self, other, deps=True):
         """Merge the constraints of other with self.
 
@@ -3108,6 +3162,7 @@ class Spec(object):
 
         return changed
 
+    @lang.mutating
     def _constrain_dependencies(self, other):
         """Apply constraints of other spec's dependencies to this spec."""
         other = self._autospec(other)
@@ -3169,7 +3224,7 @@ class Spec(object):
         it.  If it's a string, tries to parse a string.  If that fails, tries
         to parse a local spec from it (i.e. name is assumed to be self's name).
         """
-        if isinstance(spec_like, Spec):
+        if isinstance(spec_like, (Spec, CowSpec)):
             return spec_like
         return Spec(spec_like)
 
@@ -3348,6 +3403,7 @@ class Spec(object):
 
         return patches
 
+    @lang.mutating
     def _dup(self, other, deps=True, cleardeps=True, caches=None):
         """Copy the spec other into self.  This is an overwriting
         copy. It does not copy any dependents (parents), but by default
@@ -3450,6 +3506,7 @@ class Spec(object):
 
         return changed
 
+    @lang.mutating
     def _dup_deps(self, other, deptypes, caches):
         new_specs = {self.name: self}
         for dspec in other.traverse_edges(cover='edges',
@@ -3496,7 +3553,7 @@ class Spec(object):
                 deps=('build', 'run'):
 
         """
-        clone = Spec.__new__(Spec)
+        clone = self._new_basic()
         clone._dup(self, deps=deps, **kwargs)
         return clone
 
@@ -4248,9 +4305,11 @@ class Spec(object):
         return self._build_spec or self
 
     @build_spec.setter
+    @lang.mutating
     def build_spec(self, value):
         self._build_spec = value
 
+    @lang.mutating
     def splice(self, other, transitive):
         """Splices dependency "other" into this ("target") Spec, and return the
         result as a concrete Spec.
@@ -4318,6 +4377,7 @@ class Spec(object):
         nodes[self.name].clear_cached_hashes()
         return nodes[self.name]
 
+    @lang.mutating
     def clear_cached_hashes(self):
         """
         Clears all cached hashes in a Spec, while preserving other properties.
@@ -4340,7 +4400,12 @@ class Spec(object):
         # This is the normal hash for lazy_lexicographic_ordering. It's
         # slow for large specs because it traverses the whole spec graph,
         # so we hope it only runs on abstract specs, which are small.
-        return hash(lang.tuplify(self._cmp_iter))
+        return hash(id(self))
+        # return hash(lang.tuplify(self._cmp_iter))
+
+
+class CowSpec(lang.cow(Spec)):
+    """A copy-on-write wrapper for `Spec` instances."""
 
 
 class LazySpecCache(collections.defaultdict):

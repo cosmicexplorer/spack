@@ -118,7 +118,7 @@ def _autospec(function):
        function to a Spec."""
 
     def converter(self, spec_like, *args, **kwargs):
-        if not isinstance(spec_like, spack.spec.Spec):
+        if not isinstance(spec_like, (spack.spec.Spec, spack.spec.CowSpec)):
             spec_like = spack.spec.Spec(spec_like)
         return function(self, spec_like, *args, **kwargs)
 
@@ -1468,7 +1468,7 @@ class Database(object):
         # TODO: these really special cases that only belong here?
 
         # Just look up concrete specs with hashes; no fancy search.
-        if isinstance(query_spec, spack.spec.Spec) and query_spec.concrete:
+        if isinstance(query_spec, (spack.spec.Spec, spack.spec.CowSpec)) and query_spec.concrete:
             # TODO: handling of hashes restriction is not particularly elegant.
             hash_key = query_spec.dag_hash()
             if (hash_key in self._data and

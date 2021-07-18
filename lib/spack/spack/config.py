@@ -1113,6 +1113,11 @@ def merge_yaml(dest, source):
                 dest[sk] = merge_yaml(old_dest_value, sv)
             else:
                 # if sk ended with ::, or if it's new, completely override
+                # if isinstance(sv, yaml.comments.CommentedMap):
+                #     # import pdb; pdb.set_trace()
+                #     dest[sk] = copy.deepcopy(sv)
+                # else:
+                #     dest[sk] = sv
                 dest[sk] = copy.deepcopy(sv)
 
         # reinsert dest keys so they are last in the result

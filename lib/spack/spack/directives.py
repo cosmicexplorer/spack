@@ -479,9 +479,8 @@ def provides(*specs, **kwargs):
                     raise CircularReferenceError(
                         "Package '%s' cannot provide itself.")
 
-                if provided_spec not in pkg.provided:
-                    pkg.provided[provided_spec] = set()
-                pkg.provided[provided_spec].add(when_spec)
+                provider_set = pkg.provided.setdefault(provided_spec, set())
+                provider_set.add(when_spec)
     return _execute_provides
 
 

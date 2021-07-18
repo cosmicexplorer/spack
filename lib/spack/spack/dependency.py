@@ -97,7 +97,7 @@ class Dependency(object):
             spec (Spec): Spec indicating dependency requirements
             type (sequence): strings describing dependency relationship
         """
-        assert isinstance(spec, spack.spec.Spec)
+        assert isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec))
 
         self.pkg = pkg
         self.spec = spec.copy()

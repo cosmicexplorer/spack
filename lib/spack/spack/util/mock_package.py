@@ -85,7 +85,7 @@ class MockPackageMultiRepo(object):
         self.full_namespace = 'spack.pkg.mock'  # python import namespace
 
     def get(self, spec):
-        if not isinstance(spec, spack.spec.Spec):
+        if not isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec)):
             spec = Spec(spec)
         if spec.name not in self.spec_to_pkg:
             raise spack.repo.UnknownPackageError(spec.fullname)

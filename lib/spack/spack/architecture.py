@@ -349,7 +349,7 @@ class Platform(object):
         yield oses
 
 
-@lang.lazy_lexicographic_ordering
+@lang.lazy_lexicographic_ordering(cache_iter=True)
 class OperatingSystem(object):
     """ Operating System will be like a class similar to platform extended
         by subclasses for the specifics. Operating System will contain the
@@ -358,8 +358,16 @@ class OperatingSystem(object):
     """
 
     def __init__(self, name, version):
-        self.name = name.replace('-', '_')
-        self.version = str(version).replace('-', '_')
+        self._name = name.replace('-', '_')
+        self._version = str(version).replace('-', '_')
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def version(self):
+        return self._version
 
     def __str__(self):
         return "%s%s" % (self.name, self.version)
@@ -378,7 +386,7 @@ class OperatingSystem(object):
         ])
 
 
-@lang.lazy_lexicographic_ordering
+@lang.lazy_lexicographic_ordering(cache_iter=True)
 class Arch(object):
     """Architecture is now a class to help with setting attributes.
 
@@ -386,17 +394,29 @@ class Arch(object):
     """
 
     def __init__(self, plat=None, os=None, target=None):
-        self.platform = plat
+        self._platform = plat
         if plat and os:
-            os = self.platform.operating_system(os)
-        self.os = os
+            os = self._platform.operating_system(os)
+        self._os = os
         if plat and target:
-            target = self.platform.target(target)
-        self.target = target
+            target = self._platform.target(target)
+        self._target = target
 
         # Hooks for parser to use when platform is set after target or os
         self.target_string = None
         self.os_string = None
+
+    @property
+    def platform(self):
+        return self._platform
+
+    @property
+    def os(self):
+        return self._os
+
+    @property
+    def target(self):
+        return self._target
 
     @property
     def concrete(self):

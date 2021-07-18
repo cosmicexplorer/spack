@@ -203,7 +203,7 @@ def _convert_to_iterable(single_val_or_multiple):
         return []
     elif isinstance(x, six.string_types):
         return [x]
-    elif isinstance(x, spack.spec.Spec):
+    elif isinstance(x, (spack.spec.Spec, spack.spec.CowSpec)):
         # Specs are iterable, but a single spec should be converted to a list
         return [x]
 

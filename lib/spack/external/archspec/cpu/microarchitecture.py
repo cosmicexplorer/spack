@@ -1,4 +1,4 @@
-# Copyright 2019-2020 Lawrence Livermore National Security, LLC and other
+# Copyright 2019-2021 Lawrence Livermore National Security, LLC and other
 # Archspec Project Developers. See the top-level COPYRIGHT file for details.
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
@@ -82,14 +82,17 @@ class Microarchitecture(object):
         self.features = features
         self.compilers = compilers
         self.generation = generation
+        self._cached_ancestors = None
 
     @property
     def ancestors(self):
         """All the ancestors of this microarchitecture."""
-        value = self.parents[:]
-        for parent in self.parents:
-            value.extend(a for a in parent.ancestors if a not in value)
-        return value
+        if self._cached_ancestors is None:
+            value = self.parents[:]
+            for parent in self.parents:
+                value.extend(a for a in parent.ancestors if a not in value)
+            self._cached_ancestors = value
+        return self._cached_ancestors
 
     def _to_set(self):
         """Returns a set of the nodes in this microarchitecture DAG."""

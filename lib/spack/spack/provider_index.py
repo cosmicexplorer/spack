@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """Classes and functions to manage providers of virtual dependencies"""
 import itertools
+from collections import defaultdict
 
 import six
 
@@ -149,10 +150,10 @@ class ProviderIndex(_IndexBase):
             specs = []
 
         self.restrict = restrict
-        self.providers = {}
+        self.providers = defaultdict(lambda: defaultdict(set))
 
         for spec in specs:
-            if not isinstance(spec, spack.spec.Spec):
+            if not isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec)):
                 spec = spack.spec.Spec(spec)
 
             if spec.virtual:
@@ -166,7 +167,7 @@ class ProviderIndex(_IndexBase):
         Args:
             spec: spec potentially providing additional virtual specs
         """
-        if not isinstance(spec, spack.spec.Spec):
+        if not isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec)):
             spec = spack.spec.Spec(spec)
 
         if not spec.name:
@@ -182,32 +183,25 @@ class ProviderIndex(_IndexBase):
                 # We want satisfaction other than flags
                 provider_spec.compiler_flags = spec.compiler_flags.copy()
 
-                if spec.satisfies(provider_spec, deps=False):
-                    provided_name = provided_spec.name
+                if not spec.satisfies(provider_spec, deps=False):
+                    continue
 
-                    provider_map = self.providers.setdefault(provided_name, {})
-                    if provided_spec not in provider_map:
-                        provider_map[provided_spec] = set()
+                provider_map = self.providers[provided_spec.name]
+                provider_set = provider_map[provided_spec]
 
-                    if self.restrict:
-                        provider_set = provider_map[provided_spec]
-
-                        # If this package existed in the index before,
-                        # need to take the old versions out, as they're
-                        # now more constrained.
-                        old = set(
-                            [s for s in provider_set if s.name == spec.name])
-                        provider_set.difference_update(old)
-
-                        # Now add the new version.
-                        provider_set.add(spec)
-
-                    else:
-                        # Before putting the spec in the map, constrain
-                        # it so that it provides what was asked for.
-                        constrained = spec.copy()
-                        constrained.constrain(provider_spec)
-                        provider_map[provided_spec].add(constrained)
+                if self.restrict:
+                    # If this package existed in the index before,
+                    # need to take the old versions out, as they're
+                    # now more constrained.
+                    old = set(
+                        [s for s in provider_set if s.name == spec.name])
+                    provider_set.difference_update(old)
+                    # Now add the new version.
+                    provider_set.add(spec)
+                else:
+                    # Before putting the spec in the map, constrain
+                    # it so that it provides what was asked for.
+                    provider_set.add(spec.constrained(provider_spec))
 
     def to_json(self, stream=None):
         """Dump a JSON representation of this object.
