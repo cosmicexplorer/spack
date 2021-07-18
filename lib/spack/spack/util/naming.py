@@ -47,6 +47,7 @@ _bpp_name = re.compile('^(bpp)([^-])')
 
 @memoized
 def mod_to_class(mod_name):
+    # type: (str) -> str
     """Convert a name from module style to class name style.  Spack mostly
        follows `PEP-8 <http://legacy.python.org/dev/peps/pep-0008/>`_:
 

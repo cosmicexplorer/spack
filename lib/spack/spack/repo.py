@@ -17,7 +17,7 @@ import stat
 import sys
 import traceback
 import types
-from typing import Dict  # novm
+from typing import Any, Dict, Optional, Type  # novm
 
 import six
 
@@ -49,6 +49,7 @@ repo_namespace = 'spack.pkg'
 
 
 def get_full_namespace(namespace):
+    # type: (str) -> str
     """Returns the full namespace of a repository, given its relative one."""
     return '{0}.{1}'.format(repo_namespace, namespace)
 
@@ -386,6 +387,7 @@ class RepoIndex(object):
 
     """
     def __init__(self, package_checker, namespace):
+        # type: (Any, str) -> None
         self.checker = package_checker
         self.packages_path = self.checker.packages_path
         self.namespace = namespace
@@ -651,25 +653,26 @@ class RepoPath(object):
         """Time a package file in this repo was last updated."""
         return max(repo.last_mtime() for repo in self.repos)
 
+    @llnl.util.lang.memoized
     def repo_for_pkg(self, spec):
         """Given a spec, get the repository for its package."""
         # We don't @_autospec this function b/c it's called very frequently
         # and we want to avoid parsing str's into Specs unnecessarily.
-        namespace = None
-        if isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec)):
-            namespace = spec.namespace
-            name = spec.name
-        else:
+        if isinstance(spec, six.string_types):
             # handle strings directly for speed instead of @_autospec'ing
             namespace, _, name = spec.rpartition('.')
+        else:
+            namespace = spec.namespace
+            name = spec.name
 
         # If the spec already has a namespace, then return the
         # corresponding repo if we know about it.
         if namespace:
             fullspace = get_full_namespace(namespace)
-            if fullspace not in self.by_namespace:
-                raise UnknownNamespaceError(spec.namespace)
-            return self.by_namespace[fullspace]
+            try:
+                return self.by_namespace[fullspace]
+            except KeyError as e:
+                raise six.raise_from(UnknownNamespaceError(spec.namespace), e)
 
         # If there's no namespace, search in the RepoPath.
         for repo in self.repos:
@@ -786,7 +789,7 @@ class Repo(object):
         self._names = self.full_namespace.split('.')
 
         # These are internal cache variables.
-        self._modules = {}
+        self._modules = {}  # type: Dict[str, types.ModuleType]
         self._classes = {}
         self._instances = {}
 
@@ -1096,6 +1099,7 @@ class Repo(object):
         return pkg_name in self.provider_index
 
     def _get_pkg_module(self, pkg_name):
+        # type: (str) -> types.ModuleType
         """Create a module for a particular package.
 
         This caches the module within this Repo *instance*.  It does
@@ -1104,38 +1108,45 @@ class Repo(object):
         loaded once per repo.
 
         """
-        if pkg_name not in self._modules:
-            file_path = self.filename_for_package_name(pkg_name)
+        module = self._modules.get(pkg_name, None)  # type: Optional[types.ModuleType]
+        if module is not None:
+            return module
 
-            if not os.path.exists(file_path):
-                raise UnknownPackageError(pkg_name, self)
+        file_path = self.filename_for_package_name(pkg_name)
 
-            if not os.path.isfile(file_path):
-                tty.die("Something's wrong. '%s' is not a file!" % file_path)
+        if not os.path.exists(file_path):
+            raise UnknownPackageError(pkg_name, self)
 
-            if not os.access(file_path, os.R_OK):
-                tty.die("Cannot read '%s'!" % file_path)
+        if not os.path.isfile(file_path):
+            tty.die("Something's wrong. '%s' is not a file!" % file_path)
 
-            # e.g., spack.pkg.builtin.mpich
-            fullname = "%s.%s" % (self.full_namespace, pkg_name)
+        if not os.access(file_path, os.R_OK):
+            tty.die("Cannot read '%s'!" % file_path)
 
-            try:
-                module = simp.load_source(fullname, file_path,
-                                          prepend=_package_prepend)
-            except SyntaxError as e:
-                # SyntaxError strips the path from the filename so we need to
-                # manually construct the error message in order to give the
-                # user the correct package.py where the syntax error is located
-                raise SyntaxError('invalid syntax in {0:}, line {1:}'
-                                  .format(file_path, e.lineno))
+        # e.g., spack.pkg.builtin.mpich
+        fullname = "%s.%s" % (self.full_namespace, pkg_name)
 
-            module.__package__ = self.full_namespace
-            module.__loader__ = self
-            self._modules[pkg_name] = module
+        try:
+            module = simp.load_source(fullname, file_path,
+                                      prepend=_package_prepend)
+        except SyntaxError as e:
+            # SyntaxError strips the path from the filename so we need to
+            # manually construct the error message in order to give the
+            # user the correct package.py where the syntax error is located
+            raise six.raise_from(
+                SyntaxError('invalid syntax in {0:}, line {1:}'
+                            .format(file_path, e.lineno)),
+                e)
+        assert module is not None
+
+        module.__package__ = self.full_namespace
+        module.__loader__ = self
+        self._modules[pkg_name] = module
 
         return self._modules[pkg_name]
 
     def get_pkg_class(self, pkg_name):
+        # type: (str) -> Type
         """Get the class for the package out of its module.
 
         First loads (or fetches from cache) a module for the

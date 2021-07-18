@@ -14,6 +14,7 @@ import sys
 import types
 from abc import ABCMeta, abstractmethod
 from datetime import datetime, timedelta
+from typing import Callable, TypeVar  # novm
 
 import six
 from six import string_types
@@ -195,7 +196,11 @@ def union_dicts(*dicts):
     return result
 
 
+_F = TypeVar('_F', bound='Callable')
+
+
 def memoized(func):
+    # type: (_F) -> _F
     """Decorator that caches the results of a function, storing them in
     an attribute of that function.
     """
