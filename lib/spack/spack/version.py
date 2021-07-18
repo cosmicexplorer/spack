@@ -31,6 +31,8 @@ from functools import wraps
 
 from six import string_types
 
+from llnl.util.lang import memoized
+
 import spack.error
 from spack.util.spack_yaml import syaml_dict
 
@@ -48,6 +50,7 @@ infinity_versions = ['develop', 'main', 'master', 'head', 'trunk']
 iv_min_len = min(len(s) for s in infinity_versions)
 
 
+@memoized
 def coerce_versions(a, b):
     """
     Convert both a and b to the 'greatest' type between them, in this order:
