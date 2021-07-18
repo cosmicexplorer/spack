@@ -8,6 +8,7 @@ from collections import defaultdict
 
 import six
 
+import spack.spec
 import spack.error
 import spack.util.spack_json as sjson
 
@@ -77,7 +78,7 @@ class _IndexBase(object):
                     result.update(spec_set)
 
         # Return providers in order. Defensively copy.
-        return sorted(s.copy() for s in result)
+        return sorted(spack.spec.CowSpec(s) for s in result)
 
     def __contains__(self, name):
         return name in self.providers

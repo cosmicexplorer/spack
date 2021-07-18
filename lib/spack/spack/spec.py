@@ -4432,13 +4432,22 @@ class Spec(object):
         # return hash(lang.tuplify(self._cmp_iter))
 
 
+@lang.lazy_lexicographic_ordering
 class CowSpec(lang.Cow):
     """A copy-on-write wrapper for `Spec` instances."""
 
     def __init__(self, base):
         # type: (Spec) -> None
+        if isinstance(base, CowSpec):
+            base = base._base
         assert isinstance(base, Spec), base
         super(CowSpec, self).__init__(base)
+
+    def _cmp_iter(self):
+        return self._base._cmp_iter()
+
+    def __getitem__(self, key):
+        return self._base[key]
 
 
 class LazySpecCache(collections.defaultdict):
