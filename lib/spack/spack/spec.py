@@ -1426,6 +1426,25 @@ class Spec(object):
                'parents', traverses upwards in the DAG towards the root.
 
         """
+        for edge in self._traverse_edges_1(visited=visited,
+                                           d=d,
+                                           deptype=deptype,
+                                           dep_spec=dep_spec,
+                                           **kwargs):
+            yield edge
+
+    @lang.mutation_safe_memoized
+    def _traverse_edges_1(self, visited=None, d=0, deptype='all', dep_spec=None,
+                          **kwargs):
+        return lang.MemoizingIteratorWrapper(self._traverse_edges_2(
+            visited=visited,
+            d=d,
+            deptype=deptype,
+            dep_spec=dep_spec,
+            **kwargs))
+
+    def _traverse_edges_2(self, visited=None, d=0, deptype='all',
+                       dep_spec=None, **kwargs):
         # get initial values for kwargs
         depth = kwargs.get('depth', False)
         key_fun = kwargs.get('key', id)
@@ -2961,6 +2980,8 @@ class Spec(object):
         if self._normal:
             return False
 
+        self = lang.MutationSafeMemoized(self)
+
         # Ensure first that all packages & compilers in the DAG exist.
         self.validate_or_raise()
         # Clear the DAG and collect all dependencies in the DAG, which will be
@@ -4411,8 +4432,13 @@ class Spec(object):
         # return hash(lang.tuplify(self._cmp_iter))
 
 
-class CowSpec(lang.cow(Spec)):
+class CowSpec(lang.Cow):
     """A copy-on-write wrapper for `Spec` instances."""
+
+    def __init__(self, base):
+        # type: (Spec) -> None
+        assert isinstance(base, Spec), base
+        super(CowSpec, self).__init__(base)
 
 
 class LazySpecCache(collections.defaultdict):

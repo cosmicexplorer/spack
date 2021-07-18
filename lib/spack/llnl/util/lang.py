@@ -13,6 +13,7 @@ import re
 import sys
 import types
 from abc import ABCMeta, abstractmethod
+from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Callable, TypeVar  # novm
 
@@ -26,9 +27,9 @@ else:
     from itertools import zip_longest  # novm
 
 if sys.version_info >= (3, 3):
-    from collections.abc import Hashable, MutableMapping  # novm
+    from collections.abc import Hashable, Iterator, MutableMapping  # novm
 else:
-    from collections import Hashable, MutableMapping
+    from collections import Hashable, Iterator, MutableMapping
 
 
 # Ignore emacs backups when listing modules
@@ -207,10 +208,11 @@ def memoized(func):
     func.cache = {}
 
     @functools.wraps(func)
-    def _memoized_function(*args):
-        if args not in func.cache:
-            func.cache[args] = func(*args)
-        return func.cache[args]
+    def _memoized_function(*args, **kwargs):
+        key = args + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
+        if key not in func.cache:
+            func.cache[key] = func(*args, **kwargs)
+        return func.cache[key]
 
     return _memoized_function
 
@@ -545,35 +547,104 @@ def mutating(f):
     return mutating.mark_instance(f)
 
 
-def cow(cls):
+class Cow(object):
+    def __init__(self, base):
+        self._base = base
+        self._copied = None
 
-    class Wrapped(object):
-        def __init__(self, base):
-            self._base = base
-            self._copied = None
-
-        def __getattr__(self, name):
-            # (1) If we refer  to our own attributes, do not forward.
-            if name in ['__init__', '_base', '_copied']:
-                return object.__getattribute__(self, name)
-            # (2) If we have already copied, use that object.
-            if self._copied is not None:
-                return getattr(self._copied, name)
-            # (3) Check if the attribute is defined on the type.
-            attr_value = getattr(type(self._base), name, None)
-            if attr_value is None:
-                # If not, then it is an instance field, and we forward.
-                return getattr(self._base, name)
-            # (4) If the attribute is defined on the type, and it is marked as
-            #     "mutating", then we perform the copy just once.
-            if mutating.is_instance(attr_value):
-                self._copied = self._base.copy()
-                assert self._copied is not None
-                return getattr(self._copied, name)
-            # (5) If it's non-mutating, then just apply to the base instance.
+    def __getattr__(self, name):
+        # (1) If we refer  to our own attributes, do not forward.
+        if name in ['__init__', '_base', '_copied']:
+            return object.__getattribute__(self, name)
+        # (2) If we have already copied, use that object.
+        if self._copied is not None:
+            return getattr(self._copied, name)
+        # (3) Check if the attribute is defined on the type.
+        attr_value = getattr(type(self._base), name, None)
+        if attr_value is None:
+            # If not, then it is an instance field, and we forward.
             return getattr(self._base, name)
+        # (4) If the attribute is defined on the type, and it is marked as
+        #     "mutating", then we perform the copy just once.
+        if mutating.is_instance(attr_value):
+            self._copied = self._base.copy()
+            assert self._copied is not None
+            return getattr(self._copied, name)
+        # (5) If it's non-mutating, then just apply to the base instance.
+        return getattr(self._base, name)
 
-    return Wrapped
+
+@sentinel_value_decorator('_mutation_safe_memoized')
+def mutation_safe_memoized(f):
+    assert isinstance(f, types.FunctionType), f
+    return mutation_safe_memoized.mark_instance(f)
+
+
+class MutationSafeMemoized(object):
+    def __init__(self, base):
+        self._base = base
+        self._per_function_cache = defaultdict(dict)
+
+    def __hash__(self):
+        return hash(id(self))
+
+    @memoized
+    def __getattr__(self, name):
+        # (1) If we refer  to our own attributes, do not forward.
+        if name in ['__init__', '_base', '_per_function_cache', '__hash__']:
+            return object.__getattribute__(self, name)
+        # (2) Check if the attribute is defined on the type.
+        attr_value = getattr(type(self._base), name, None)
+        if attr_value is None:
+            # If not, then it is an instance field, and we forward.
+            return getattr(self._base, name)
+        # (3) If the attribute is defined on the type, and it is marked as
+        #     "mutating", then we clear the memoization cache.
+        if mutating.is_instance(attr_value):
+            wrapped = getattr(self._base, name)
+            def cache_clearing_function(*args, **kwargs):
+                self._per_function_cache.clear()
+                return wrapped(*args, **kwargs)
+            return cache_clearing_function
+        # (4) If the attribute is marked as "mutation_safe_memoized", then check the
+        #     memoization cache and/or call the function.
+        if mutation_safe_memoized.is_instance(attr_value):
+            cur_cache = self._per_function_cache[name]
+            wrapped = getattr(self._base, name)
+            def mutation_safe_memoized_function(*args, **kwargs):
+                assert args[0] is self, args[0]
+                key = args[1:] + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
+                if key not in cur_cache:
+                    cur_cache[key] = wrapped(*args, **kwargs)
+                return cur_cache[key]
+            return mutation_safe_memoized_function
+        return getattr(self._base, name)
+
+
+class MemoizingIteratorWrapper(object):
+    def __init__(self, source):
+        # type: (Iterator) -> None
+        assert isinstance(source, Iterator), source
+        self._source = source
+        self._done = False
+        self._memoized = []
+
+    def _extract_next(self):
+        ret = next(self._source)
+        self._memoized.append(ret)
+        return ret
+
+    def __iter__(self):
+        for previously_iterated in self._memoized:
+            yield previously_iterated
+        if self._done:
+            return
+        try:
+            while True:
+                new = self._extract_next()
+                yield new
+        except StopIteration:
+            self._done = True
 
 
 @lazy_lexicographic_ordering
