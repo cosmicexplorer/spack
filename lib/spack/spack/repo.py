@@ -54,6 +54,14 @@ def get_full_namespace(namespace):
     return '{0}.{1}'.format(repo_namespace, namespace)
 
 
+def is_package_class(cls):
+    # type: (Any) -> bool
+    # FIXME: inspect.isclass is faster -- is it needed?
+    # return type(cls) == type
+    # return inspect.isclass(cls)
+    return isinstance(cls, type)
+
+
 #
 # These names describe how repos should be laid out in the filesystem.
 #
@@ -1162,7 +1170,7 @@ class Repo(object):
         module = self._get_pkg_module(pkg_name)
 
         cls = getattr(module, class_name)
-        if not inspect.isclass(cls):
+        if not is_package_class(cls):
             tty.die("%s.%s is not a class" % (pkg_name, class_name))
 
         return cls
