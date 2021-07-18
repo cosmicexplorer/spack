@@ -624,7 +624,6 @@ class MutationSafeMemoized(object):
 class MemoizingIteratorWrapper(object):
     def __init__(self, source):
         # type: (Iterator) -> None
-        assert isinstance(source, Iterator), source
         self._source = source
         self._done = False
         self._memoized = []
