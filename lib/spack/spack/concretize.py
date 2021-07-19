@@ -282,7 +282,7 @@ class Concretizer(object):
         if spec.architecture.os:
             new_os = spec.architecture.os
         else:
-            new_os_spec = find_spec(spec, FindOs(new_plat))
+            new_os_spec = find_spec_with_os(spec, new_plat)
             if new_os_spec:
                 new_os = new_os_spec.architecture.os
             else:
@@ -783,7 +783,13 @@ def find_spec(
     return spec.find_spec(condition, default=default)
 
 
-class FindCompilerCache(MutableMapping):
+class NoneCoalescingCache(MutableMapping):
+    """A pretend dict which caches nothing except a None result.
+
+    After any None value is inserted into this mapping, it will then claim that it
+    contains any key asked of it, while returning None for every access.
+    """
+
     def __init__(self):
         self._received_none = False
         self._last_value = None
@@ -815,10 +821,18 @@ class FindCompilerCache(MutableMapping):
             return True
         return False
 
-@llnl.util.lang.memoized(cache_factory=FindCompilerCache)
+
+@llnl.util.lang.memoized(cache_factory=NoneCoalescingCache)
 def find_spec_with_compiler(spec):
     # type: (spack.spec.Spec) -> Optional[spack.spec.Spec]
     return find_spec(spec, FindCompiler(), default=None)
+
+
+# FIXME: this memoization is completely wrong for this method, but it *is* fast!
+@llnl.util.lang.memoized(cache_factory=NoneCoalescingCache)
+def find_spec_with_os(spec, new_plat):
+    # type: (spack.spec.Spec, spack.architecture.Platform) -> Optional[spack.spec.Spec]
+    return find_spec(spec, FindOs(new_plat), default=None)
 
 
 def _compiler_concretization_failure(compiler_spec, arch):
