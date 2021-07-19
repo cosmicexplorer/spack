@@ -6,6 +6,8 @@ import stat
 
 from six import string_types
 
+from llnl.util.lang import memoized
+
 import spack.error
 import spack.repo
 from spack.config import ConfigError
@@ -161,7 +163,7 @@ def spec_externals(spec):
     # break circular import.
     from spack.util.module_cmd import path_from_modules  # NOQA: ignore=F401
 
-    allpkgs = spack.config.get('packages')
+    allpkgs = _allpkgs()
     names = set([spec.name])
     names |= set(vspec.name for vspec in spec.package.virtuals_provided)
 
@@ -189,10 +191,15 @@ def spec_externals(spec):
     return [s.copy() for s in external_specs]
 
 
+@memoized
+def _allpkgs():
+    return spack.config.get('packages')
+
+
 def is_spec_buildable(spec):
     """Return true if the spec pkgspec is configured as buildable"""
 
-    allpkgs = spack.config.get('packages')
+    allpkgs = _allpkgs()
     all_buildable = allpkgs.get('all', {}).get('buildable', True)
 
     # Get the list of names for which all_buildable is overridden
