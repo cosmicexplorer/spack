@@ -1311,7 +1311,7 @@ class Spec(object):
             (self.name if self.name else ''))
 
     @property
-    @lang.mutation_safe_memoized
+    @lang.memoized
     def root(self):
         """Follow dependent links and find the root of this spec's DAG.
 

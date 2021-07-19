@@ -100,7 +100,7 @@ class Dependency(object):
         assert isinstance(spec, (spack.spec.Spec, spack.spec.CowSpec))
 
         self.pkg = pkg
-        self.spec = spec.copy()
+        self.spec = spack.spec.CowSpec(spec)
 
         # This dict maps condition specs to lists of Patch objects, just
         # as the patches dict on packages does.
