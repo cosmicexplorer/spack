@@ -19,9 +19,12 @@ from __future__ import print_function
 import os.path
 import platform
 import tempfile
+from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
+from typing import Optional  # novm
 
+import six
 from functools_backport import reverse_order
 
 import archspec.cpu
@@ -100,10 +103,8 @@ class Concretizer(object):
                     candidates[0], spec)
 
             # Find nearest spec in the DAG (up then down) that has prefs.
-            spec_w_prefs = find_spec(
-                spec, lambda p: PackagePrefs.has_preferred_providers(
-                    p.name, spec.name),
-                spec)  # default to spec itself.
+            spec_w_prefs = find_spec(spec, FindHasPrefs(spec),
+                                     spec)  # default to spec itself.
 
             # Create a key to sort candidates by the prefs we found
             pref_key = PackagePrefs(spec_w_prefs.name, 'providers', spec.name)
@@ -145,9 +146,7 @@ class Concretizer(object):
 
         # Find the nearest spec in the dag that has a compiler.  We'll
         # use that spec to calibrate compiler compatibility.
-        abi_exemplar = find_spec(spec, lambda x: x.compiler)
-        if abi_exemplar is None:
-            abi_exemplar = spec.root
+        abi_exemplar = find_spec(spec, FindCompiler(), default=spec.root)
 
         # Sort candidates from most to least compatibility.
         #   We reverse because True > False.
@@ -261,9 +260,9 @@ class Concretizer(object):
             # Else if anyone else has a platform, take the closest one
             # Search up, then down, along build/link deps first
             # Then any nearest. Algorithm from compilerspec search
-            platform_spec = find_spec(
-                spec, lambda x: x.architecture and x.architecture.platform
-            )
+            # FIXME: "else if anyone else has a platform" -- this should be
+            # highly cacheable!
+            platform_spec = find_spec(spec, FindArchPlatform())
             if platform_spec:
                 new_plat = spack.architecture.get_platform(
                     platform_spec.architecture.platform)
@@ -277,11 +276,7 @@ class Concretizer(object):
         if spec.architecture.os:
             new_os = spec.architecture.os
         else:
-            new_os_spec = find_spec(
-                spec, lambda x: (x.architecture and
-                                 x.architecture.platform == str(new_plat) and
-                                 x.architecture.os)
-            )
+            new_os_spec = find_spec(spec, FindOs(new_plat))
             if new_os_spec:
                 new_os = new_os_spec.architecture.os
             else:
@@ -295,12 +290,7 @@ class Concretizer(object):
         if spec.architecture.target and spec.architecture.target_concrete:
             new_target = spec.architecture.target
         else:
-            new_target_spec = find_spec(
-                spec, lambda x: (x.architecture and
-                                 x.architecture.platform == str(new_plat) and
-                                 x.architecture.target and
-                                 x.architecture.target != curr_target)
-            )
+            new_target_spec = find_spec(spec, FindTarget(new_plat, curr_target))
             if new_target_spec:
                 if curr_target:
                     # constrain one target by the other
@@ -446,7 +436,7 @@ class Concretizer(object):
 
         # Find another spec that has a compiler, or the root if none do
         other_spec = spec if spec.compiler else find_spec(
-            spec, lambda x: x.compiler, spec.root)
+            spec, FindCompiler(), spec.root)
         other_compiler = other_spec.compiler
         assert other_spec
 
@@ -667,34 +657,120 @@ def enable_compiler_existence_check():
     Concretizer.check_for_compiler_existence = saved
 
 
+@six.add_metaclass(ABCMeta)
+class FindSpecPredicate(object):
+    def __hash__(self):
+        return hash(type(self))
+
+    def __eq__(self, other):
+        return type(self) == type(other)
+
+    def __ne__(self, other):
+        return not self == other
+
+    @abstractmethod
+    def __call__(self, x):
+        # type: (spack.spec.Spec) -> bool
+        pass
+
+
+class FindCompiler(FindSpecPredicate):
+    def __call__(self, x):
+        # type: (spack.spec.Spec) -> bool
+        return bool(x.compiler)
+
+
+class FindHasPrefs(FindSpecPredicate):
+    def __init__(self, spec):
+        # type: (spack.spec.Spec) -> None
+        self._spec = spec
+
+    @property
+    def name(self):
+        # type: () -> str
+        return self._spec.name
+
+    def __hash__(self):
+        return hash((type(self), self.name))
+
+    def __eq__(self, other):
+        return super(FindHasPrefs, self).__eq__(other) and self.name == other.name
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __call__(self, p):
+        # type: (spack.spec.Spec) -> bool
+        return PackagePrefs.has_preferred_providers(p.name, self.name)
+
+
+class FindArchPlatform(FindSpecPredicate):
+    def __call__(self, x):
+        # type: (spack.spec.Spec) -> bool
+        return bool(x.architecture and x.architecture.platform)
+
+
+class FindOs(FindSpecPredicate):
+    def __init__(self, new_plat):
+        # type: (spack.architecture.Platform) -> None
+        self._new_plat = new_plat
+
+    @property
+    def new_plat(self):
+        # type: () -> str
+        return str(self._new_plat)
+
+    def __hash__(self):
+        return hash((type(self), self.new_plat))
+
+    def __eq__(self, other):
+        return super(FindOs, self).__eq__(other) and self.new_plat == other.new_plat
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __call__(self, x):
+        # type: (spack.spec.Spec) -> bool
+        return bool(x.architecture and
+                    x.architecture.platform == self.new_plat and
+                    x.architecture.os)
+
+
+class FindTarget(FindSpecPredicate):
+    def __init__(self, new_plat, curr_target):
+        # type: (spack.architecture.Platform, spack.architecture.Platform) -> None
+        self._new_plat = new_plat
+        self._curr_target = curr_target
+
+    @property
+    def new_plat(self):
+        # type: () -> str
+        return str(self._new_plat)
+
+    def __hash__(self):
+        return hash((type(self), self.new_plat, self._curr_target))
+
+    def __eq__(self, other):
+        return (super(FindTarget, self).__eq__(other) and
+                self.new_plat == other.new_plat and
+                self._curr_target == other._curr_target)
+
+    def __ne__(self, other):
+        return not self == other
+
+    def __call__(self, x):
+        # type: (spack.spec.Spec) -> bool
+        return bool(x.architecture and
+                    x.architecture.platform == self.new_plat and
+                    x.architecture.target and
+                    x.architecture.target != self._curr_target)
+
+
 def find_spec(spec, condition, default=None):
     """Searches the dag from spec in an intelligent order and looks
        for a spec that matches a condition"""
-    # First search parents, then search children
-    deptype = ('build', 'link')
-    dagiter = chain(
-        spec.traverse(direction='parents',  deptype=deptype, root=False),
-        spec.traverse(direction='children', deptype=deptype, root=False))
-    visited = set()
-    for relative in dagiter:
-        if condition(relative):
-            return relative
-        visited.add(id(relative))
-
-    # Then search all other relatives in the DAG *except* spec
-    for relative in spec.root.traverse(deptypes=all):
-        if relative is spec:
-            continue
-        if id(relative) in visited:
-            continue
-        if condition(relative):
-            return relative
-
-    # Finally search spec itself.
-    if condition(spec):
-        return spec
-
-    return default   # Nothing matched the condition; return default.
+    spec = llnl.util.lang.MutationSafeMemoized(spec)
+    return spec.find_spec(condition, default=default)
 
 
 def _compiler_concretization_failure(compiler_spec, arch):

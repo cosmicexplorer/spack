@@ -1311,6 +1311,7 @@ class Spec(object):
             (self.name if self.name else ''))
 
     @property
+    @lang.mutation_safe_memoized
     def root(self):
         """Follow dependent links and find the root of this spec's DAG.
 
@@ -1320,6 +1321,34 @@ class Spec(object):
             return self
 
         return next(iter(self._dependents.values())).parent.root
+
+    @lang.mutation_safe_memoized
+    def find_spec(self, condition, default=None):
+        # First search parents, then search children
+        deptype = ('build', 'link')
+        dagiter = itertools.chain(
+            self.traverse(direction='parents',  deptype=deptype, root=False),
+            self.traverse(direction='children', deptype=deptype, root=False))
+        visited = set()
+        for relative in dagiter:
+            if condition(relative):
+                return relative
+            visited.add(id(relative))
+
+        # Then search all other relatives in the DAG *except* self
+        for relative in self.root.traverse(deptypes=all):
+            if relative is self:
+                continue
+            if id(relative) in visited:
+                continue
+            if condition(relative):
+                return relative
+
+        # Finally search self itself.
+        if condition(self):
+            return self
+
+        return default   # Nothing matched the condition; return default.
 
     @property
     def package(self):

@@ -582,6 +582,8 @@ def mutation_safe_memoized(f):
 
 class MutationSafeMemoized(object):
     def __init__(self, base):
+        if isinstance(base, MutationSafeMemoized):
+            base = base._base
         self._base = base
         self._per_function_cache = defaultdict(dict)
 
@@ -612,8 +614,8 @@ class MutationSafeMemoized(object):
             cur_cache = self._per_function_cache[name]
             wrapped = getattr(self._base, name)
             def mutation_safe_memoized_function(*args, **kwargs):
-                assert args[0] is self, args[0]
-                key = args[1:] + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
+                key_args = args[1:] if args[0] is self else args
+                key = key_args + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
                 if key not in cur_cache:
                     cur_cache[key] = wrapped(*args, **kwargs)
                 return cur_cache[key]
