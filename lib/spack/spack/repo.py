@@ -11,6 +11,7 @@ import functools
 import inspect
 import itertools
 import os
+import pickle
 import re
 import shutil
 import stat
@@ -69,6 +70,7 @@ repo_config_name   = 'repo.yaml'   # Top-level filename for repo config.
 repo_index_name    = 'index.yaml'  # Top-level filename for repository index.
 packages_dir_name  = 'packages'    # Top-level repo directory containing pkgs.
 package_file_name  = 'package.py'  # Filename for packages in a repository.
+pickle_file_name  = 'package.pickle'  # ???
 
 #: Guaranteed unused default value for some functions.
 NOT_PROVIDED = object()
@@ -551,7 +553,7 @@ class RepoPath(object):
         """
         full_namespace = get_full_namespace(namespace)
         if full_namespace not in self.by_namespace:
-            if default == NOT_PROVIDED:
+            if default is NOT_PROVIDED:
                 raise UnknownNamespaceError(namespace)
             return default
         return self.by_namespace[full_namespace]
@@ -1029,11 +1031,13 @@ class Repo(object):
         return [p for p in self.all_packages() if p.extends(extendee_spec)]
 
     def dirname_for_package_name(self, pkg_name):
+        # type: (str) -> str
         """Get the directory name for a particular package.  This is the
            directory that contains its package.py file."""
         return os.path.join(self.packages_path, pkg_name)
 
     def filename_for_package_name(self, pkg_name):
+        # type: (str) -> str
         """Get the filename for the module we should load for a particular
            package.  Packages for a Repo live in
            ``$root/<package_name>/package.py``
@@ -1044,6 +1048,11 @@ class Repo(object):
         """
         pkg_dir = self.dirname_for_package_name(pkg_name)
         return os.path.join(pkg_dir, package_file_name)
+
+    def pickle_path_for_package_name(self, pkg_name):
+        # type: (str) -> str
+        pkg_dir = self.dirname_for_package_name(pkg_name)
+        return os.path.join(pkg_dir, pickle_file_name)
 
     @property
     def _pkg_checker(self):
@@ -1153,6 +1162,7 @@ class Repo(object):
 
         return self._modules[pkg_name]
 
+    @llnl.util.lang.memoized
     def get_pkg_class(self, pkg_name):
         # type: (str) -> Type
         """Get the class for the package out of its module.
@@ -1166,10 +1176,23 @@ class Repo(object):
             raise InvalidNamespaceError('Invalid namespace for %s repo: %s'
                                         % (self.namespace, namespace))
 
-        class_name = nm.mod_to_class(pkg_name)
-        module = self._get_pkg_module(pkg_name)
+        pickle_path = self.pickle_path_for_package_name(pkg_name)
 
-        cls = getattr(module, class_name)
+        cls = None
+        try:
+            with open(pickle_path, 'rb') as f:
+                cls = pickle.load(f)
+        except (OSError, EOFError):
+            pass
+
+        if cls is None:
+            class_name = nm.mod_to_class(pkg_name)
+            module = self._get_pkg_module(pkg_name)
+            cls = getattr(module, class_name)
+
+            with open(pickle_path, 'wb') as f:
+                pickle.dump(cls, f)
+
         if not is_package_class(cls):
             tty.die("%s.%s is not a class" % (pkg_name, class_name))
 

@@ -509,3 +509,5 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+
+*.pickle
