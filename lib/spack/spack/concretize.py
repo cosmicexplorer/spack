@@ -23,7 +23,7 @@ import tempfile
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
-from typing import Callable, Optional  # novm
+from typing import Callable, Optional, Tuple  # novm
 
 if sys.version_info >= (3, 3):
     from collections.abc import MutableMapping  # novm
@@ -53,6 +53,15 @@ from spack.version import Version, VersionList, VersionRange, ver
 
 #: impements rudimentary logic for ABI compatibility
 _abi = llnl.util.lang.Singleton(lambda: spack.abi.ABI())
+
+
+@llnl.util.lang.memoized
+def _spec_is_compatible_with(spec, abi_exemplar):
+    # type: (spack.spec.Spec, spack.spec.Spec) -> Tuple[bool, bool]
+    return (
+        _abi.compatible(spec, abi_exemplar, loose=True),
+        _abi.compatible(spec, abi_exemplar),
+    )
 
 
 class Concretizer(object):
@@ -159,9 +168,7 @@ class Concretizer(object):
         #   Sort is stable, so candidates keep their order.
         return sorted(candidates,
                       reverse=True,
-                      key=lambda spec: (
-                          _abi.compatible(spec, abi_exemplar, loose=True),
-                          _abi.compatible(spec, abi_exemplar)))
+                      key=lambda spec: _spec_is_compatible_with(spec, abi_exemplar))
 
     def concretize_version(self, spec):
         """If the spec is already concrete, return.  Otherwise take

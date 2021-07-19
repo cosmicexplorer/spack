@@ -10,6 +10,7 @@ from llnl.util.lang import memoized
 
 import spack.error
 import spack.repo
+import spack.spec
 from spack.config import ConfigError
 from spack.util.path import canonicalize_path
 from spack.version import VersionList
@@ -163,13 +164,11 @@ def spec_externals(spec):
     # break circular import.
     from spack.util.module_cmd import path_from_modules  # NOQA: ignore=F401
 
-    allpkgs = _allpkgs()
-    names = set([spec.name])
-    names |= set(vspec.name for vspec in spec.package.virtuals_provided)
+    names = frozenset([spec.name]) | spec.package.virtuals_names()
 
     external_specs = []
     for name in names:
-        pkg_config = allpkgs.get(name, {})
+        pkg_config = _allpkgs().get(name, {})
         pkg_externals = pkg_config.get('externals', [])
         for entry in pkg_externals:
             spec_str = entry['spec']
@@ -188,7 +187,7 @@ def spec_externals(spec):
                 external_specs.append(external_spec)
 
     # Defensively copy returned specs
-    return [s.copy() for s in external_specs]
+    return [spack.spec.CowSpec(s) for s in external_specs]
 
 
 @memoized
@@ -196,19 +195,27 @@ def _allpkgs():
     return spack.config.get('packages')
 
 
+@memoized
+def _all_buildable():
+    return _allpkgs().get('all', {}).get('buildable', True)
+
+
+@memoized
+def _buildable_overridden():
+    """Get the list of names for which 'buildable' is overridden."""
+    return frozenset(
+        name for name, entry in _allpkgs().items()
+        if entry.get('buildable', _all_buildable()) != _all_buildable()
+    )
+
+
 def is_spec_buildable(spec):
     """Return true if the spec pkgspec is configured as buildable"""
-
-    allpkgs = _allpkgs()
-    all_buildable = allpkgs.get('all', {}).get('buildable', True)
-
-    # Get the list of names for which all_buildable is overridden
-    reverse = [name for name, entry in allpkgs.items()
-               if entry.get('buildable', all_buildable) != all_buildable]
+    reverse = _buildable_overridden()
     # Does this spec override all_buildable
     spec_reversed = (spec.name in reverse or
                      any(spec.package.provides(name) for name in reverse))
-    return not all_buildable if spec_reversed else all_buildable
+    return not _all_buildable() if spec_reversed else _all_buildable()
 
 
 def get_package_dir_permissions(spec):

@@ -1227,6 +1227,7 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
         exts = extensions_layout.extension_map(self.extendee_spec)
         return (self.name in exts) and (exts[self.name] == self.spec)
 
+    @memoized
     def provides(self, vpkg_name):
         """
         True if this package provides a virtual package with the specified name
@@ -1243,6 +1244,10 @@ class PackageBase(six.with_metaclass(PackageMeta, PackageViewMixin, object)):
         """
         return [vspec for vspec, constraints in self.provided.items()
                 if any(self.spec.satisfies(c) for c in constraints)]
+
+    @memoized
+    def virtuals_names(self):
+        return frozenset(vspec.name for vspec in self.virtuals_provided)
 
     @property
     def installed(self):
