@@ -18,11 +18,17 @@ from __future__ import print_function
 
 import os.path
 import platform
+import sys
 import tempfile
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from itertools import chain
-from typing import Optional  # novm
+from typing import Callable, Optional  # novm
+
+if sys.version_info >= (3, 3):
+    from collections.abc import MutableMapping  # novm
+else:
+    from collections import MutableMapping
 
 import six
 from functools_backport import reverse_order
@@ -146,7 +152,7 @@ class Concretizer(object):
 
         # Find the nearest spec in the dag that has a compiler.  We'll
         # use that spec to calibrate compiler compatibility.
-        abi_exemplar = find_spec(spec, FindCompiler(), default=spec.root)
+        abi_exemplar = find_spec_with_compiler(spec) or spec.root
 
         # Sort candidates from most to least compatibility.
         #   We reverse because True > False.
@@ -766,11 +772,53 @@ class FindTarget(FindSpecPredicate):
                     x.architecture.target != self._curr_target)
 
 
-def find_spec(spec, condition, default=None):
+def find_spec(
+        spec,                   # type: spack.spec.Spec
+        condition,              # type: Callable[[spack.spec.Spec], bool]
+        default=None,           # type: Optional[spack.spec.Spec]
+):
+    # type: (...) -> Optional[spack.spec.Spec]
     """Searches the dag from spec in an intelligent order and looks
        for a spec that matches a condition"""
-    spec = llnl.util.lang.MutationSafeMemoized(spec)
     return spec.find_spec(condition, default=default)
+
+
+class FindCompilerCache(MutableMapping):
+    def __init__(self):
+        self._received_none = False
+        self._last_value = None
+
+    def __getitem__(self, _key):
+        # TODO: unclear if this is wildly wrong behavior, that being said it is the v1
+        # concretize path so maybe that's ok?
+        if self._received_none:
+            return None
+        return self._last_value
+
+    def __setitem__(self, _key, value):
+        if value is None:
+            self._received_none = True
+            return
+        self._last_value = value
+
+    def __iter__(self):
+        raise NotImplementedError(self)
+
+    def __len__(self):
+        raise NotImplementedError(self)
+
+    def __delitem__(self, key):
+        raise NotImplementedError(self)
+
+    def __contains__(self, _key):
+        if self._received_none:
+            return True
+        return False
+
+@llnl.util.lang.memoized(cache_factory=FindCompilerCache)
+def find_spec_with_compiler(spec):
+    # type: (spack.spec.Spec) -> Optional[spack.spec.Spec]
+    return find_spec(spec, FindCompiler(), default=None)
 
 
 def _compiler_concretization_failure(compiler_spec, arch):

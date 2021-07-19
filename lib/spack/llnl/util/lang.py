@@ -15,7 +15,7 @@ import types
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Callable, TypeVar  # novm
+from typing import Callable, Hashable, Type, TypeVar  # novm
 
 import six
 from six import string_types
@@ -197,22 +197,54 @@ def union_dicts(*dicts):
     return result
 
 
-_F = TypeVar('_F', bound='Callable')
+_F = TypeVar('_F', bound=Callable)
 
 
-def memoized(func):
+def decorator_with_or_without_args(decorator):
+    # type: (_F) -> _F
+    """Allows a decorator to be used with or without arguments, e.g.::
+
+        # Calls the decorator function some args
+        @decorator(with, arguments, and=kwargs)
+
+    or::
+
+        # Calls the decorator function with zero arguments
+        @decorator
+
+    """
+    # See https://stackoverflow.com/questions/653368 for more on this
+    @functools.wraps(decorator)
+    def new_dec(*args, **kwargs):
+        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+            # actual decorated function
+            return decorator(args[0])
+        else:
+            # decorator arguments
+            return lambda realf: decorator(realf, *args, **kwargs)
+
+    return new_dec
+
+
+def standard_key_factory(*args, **kwargs):
+    # type: (Hashable, Hashable) -> Hashable
+    return args + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
+
+
+@decorator_with_or_without_args
+def memoized(func, key_factory=standard_key_factory, cache_factory=dict):
     # type: (_F) -> _F
     """Decorator that caches the results of a function, storing them in
     an attribute of that function.
     """
-    func.cache = {}
-
     @functools.wraps(func)
     def _memoized_function(*args, **kwargs):
-        key = args + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
-        if key not in func.cache:
-            func.cache[key] = func(*args, **kwargs)
-        return func.cache[key]
+        key = key_factory(*args, **kwargs)
+        if key not in _memoized_function.cache:
+            _memoized_function.cache[key] = func(*args, **kwargs)
+        return _memoized_function.cache[key]
+
+    _memoized_function.cache = cache_factory()
 
     return _memoized_function
 
@@ -236,31 +268,6 @@ def list_modules(directory, **kwargs):
         elif name.endswith('.py'):
             if not any(re.search(pattern, name) for pattern in ignore_modules):
                 yield re.sub('.py$', '', name)
-
-
-def decorator_with_or_without_args(decorator):
-    """Allows a decorator to be used with or without arguments, e.g.::
-
-        # Calls the decorator function some args
-        @decorator(with, arguments, and=kwargs)
-
-    or::
-
-        # Calls the decorator function with zero arguments
-        @decorator
-
-    """
-    # See https://stackoverflow.com/questions/653368 for more on this
-    @functools.wraps(decorator)
-    def new_dec(*args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
-            # actual decorated function
-            return decorator(args[0])
-        else:
-            # decorator arguments
-            return lambda realf: decorator(realf, *args, **kwargs)
-
-    return new_dec
 
 
 #: sentinel for testing that iterators are done in lazy_lexicographic_ordering
@@ -330,8 +337,12 @@ def lazy_lt(lseq, rseq):
     return False  # if equal, return False
 
 
+_C = TypeVar('_C', bound=Type)
+
+
 @decorator_with_or_without_args
 def lazy_lexicographic_ordering(cls, set_hash=True, cache_iter=False):
+    # type: (_C, bool, bool) -> _C
     """Decorates a class with extra methods that implement rich comparison.
 
     This is a lazy version of the tuple comparison used frequently to
@@ -582,13 +593,18 @@ def mutation_safe_memoized(f):
 
 class MutationSafeMemoized(object):
     def __init__(self, base):
-        if isinstance(base, MutationSafeMemoized):
-            base = base._base
+        assert not isinstance(base, MutationSafeMemoized)
         self._base = base
         self._per_function_cache = defaultdict(dict)
 
     def __hash__(self):
         return hash(id(self))
+
+    def __eq__(self, other):
+        return id(self) == id(other)
+
+    def __ne__(self, other):
+        return not self == other
 
     @memoized
     def __getattr__(self, name):
