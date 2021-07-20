@@ -15,7 +15,7 @@ import types
 from abc import ABCMeta, abstractmethod
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Callable, Hashable, Type, TypeVar  # novm
+from typing import Any, Callable, Hashable, Type, TypeVar  # novm
 
 import six
 from six import string_types
@@ -216,12 +216,14 @@ def decorator_with_or_without_args(decorator):
     # See https://stackoverflow.com/questions/653368 for more on this
     @functools.wraps(decorator)
     def new_dec(*args, **kwargs):
-        if len(args) == 1 and len(kwargs) == 0 and callable(args[0]):
+        if (len(args) == 1) and (not kwargs) and callable(args[0]):
             # actual decorated function
             return decorator(args[0])
-        else:
-            # decorator arguments
-            return lambda realf: decorator(realf, *args, **kwargs)
+        # decorator arguments
+        @functools.wraps(decorator)
+        def wrapper(realf):
+            return decorator(realf, *args, **kwargs)
+        return wrapper
 
     return new_dec
 
@@ -247,6 +249,16 @@ def memoized(func, key_factory=standard_key_factory, cache_factory=dict):
     _memoized_function.cache = cache_factory()
 
     return _memoized_function
+
+
+def per_instance_key_factory(self, *args, **kwargs):
+    # type: (Any, Hashable, Hashable) -> Hashable
+    return (id(self),) + standard_key_factory(*args, **kwargs)
+
+
+@decorator_with_or_without_args
+def memoized_method(func, **kwargs):
+    return memoized(key_factory=per_instance_key_factory, **kwargs)(func)
 
 
 def list_modules(directory, **kwargs):
@@ -569,26 +581,45 @@ class Cow(object):
     def __str__(self):
         return str(self._base)
 
+    @memoized(key_factory=lambda self, name: (id(self), name))
+    def _retrieve_copied_or_base(self, name):
+        def retrieve_copied_or_base(self):
+            # If we have already copied, use that object.
+            if self._copied is not None:
+                return getattr(self._copied, name)
+            return getattr(self._base, name)
+        retrieve_copied_or_base.__name__ = '{0}__{1}'.format(
+            name, retrieve_copied_or_base.__name__)
+        return retrieve_copied_or_base
+
+    @memoized(key_factory=lambda self, name: (id(self), name))
+    def _ensure_copied(self, name):
+        base_attr = getattr(self._base, name)
+        @functools.wraps(base_attr)
+        def ensure_copied(*args, **kwargs):
+            if self._copied is None:
+                self._copied = self._base.copy()
+                assert self._copied is not None
+            return getattr(self._copied, name)(*args, **kwargs)
+        ensure_copied.__name__ = '{0}__{1}'.format(
+            ensure_copied.__name__,
+            'ensure_copied',
+        )
+        return ensure_copied
+
     def __getattr__(self, name):
-        # (1) If we refer  to our own attributes, do not forward.
-        if name in ['__init__', '_base', '_copied']:
-            return object.__getattribute__(self, name)
-        # (2) If we have already copied, use that object.
-        if self._copied is not None:
-            return getattr(self._copied, name)
-        # (3) Check if the attribute is defined on the type.
+        retrieve_copied_or_base = self._retrieve_copied_or_base(name)
+        # (1) Check if the attribute is defined on the type.
         attr_value = getattr(type(self._base), name, None)
         if attr_value is None:
             # If not, then it is an instance field, and we forward.
-            return getattr(self._base, name)
-        # (4) If the attribute is defined on the type, and it is marked as
+            return retrieve_copied_or_base(self)
+        # (2) If the attribute is defined on the type, and it is marked as
         #     "mutating", then we perform the copy just once.
         if mutating.is_instance(attr_value):
-            self._copied = self._base.copy()
-            assert self._copied is not None
-            return getattr(self._copied, name)
-        # (5) If it's non-mutating, then just apply to the base instance.
-        return getattr(self._base, name)
+            return self._ensure_copied(name)
+        # (3) If it's non-mutating, then just apply to the base instance.
+        return retrieve_copied_or_base(self)
 
 
 @sentinel_value_decorator('_mutation_safe_memoized')
@@ -600,50 +631,70 @@ def mutation_safe_memoized(f):
 class MutationSafeMemoized(object):
     def __init__(self, base):
         assert not isinstance(base, MutationSafeMemoized)
+        # if isinstance(base, MutationSafeMemoized):
+        #     raise Exception('no!!!')
+        #     self._base = base._base
+        #     self._per_function_cache = base._per_function_cache
         self._base = base
         self._per_function_cache = defaultdict(dict)
 
-    def __hash__(self):
-        return hash(id(self))
+    def __repr__(self):
+        return repr(self._base)
 
-    def __eq__(self, other):
-        return id(self) == id(other)
-
-    def __ne__(self, other):
-        return not self == other
+    def __str__(self):
+        return str(self._base)
 
     @memoized(key_factory=lambda self, name: (id(self), name))
+    def _retrieve_from_base(self, name):
+        def retrieve_from_base(self):
+            return getattr(self._base, name)
+        retrieve_from_base.__name__ = '{0}__{1}'.format(
+            name, retrieve_from_base.__name__)
+        return retrieve_from_base
+
+    @memoized(key_factory=lambda self, name: (id(self), name))
+    def _cache_clearing_function(self, name):
+        wrapped = getattr(self._base, name)
+        @functools.wraps(wrapped)
+        def cache_clearing_function(*args, **kwargs):
+            self._per_function_cache.clear()
+            return wrapped(*args, **kwargs)
+        cache_clearing_function.__name__ = '{0}__{1}'.format(
+            cache_clearing_function.__name__, 'cache_clearing_function')
+        return cache_clearing_function
+
+    @memoized(key_factory=lambda self, name: (id(self), name))
+    def _mutation_safe_memoized_function(self, name):
+        wrapped = getattr(self._base, name)
+        @functools.wraps(wrapped)
+        def mutation_safe_memoized_function(*args, **kwargs):
+            key_args = args[1:] if args[0] is self else args
+            key = key_args + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
+            cur_cache = self._per_function_cache[name]
+            if key not in cur_cache:
+                cur_cache[key] = wrapped(*args, **kwargs)
+                return cur_cache[key]
+        mutation_safe_memoized_function.__name__ = '{0}__{1}'.format(
+            mutation_safe_memoized_function.__name__, 'mutation_safe_memoized_function')
+        return mutation_safe_memoized_function
+
     def __getattr__(self, name):
-        # (1) If we refer  to our own attributes, do not forward.
-        if name in ['__init__', '_base', '_per_function_cache', '__hash__']:
-            return object.__getattribute__(self, name)
-        # (2) Check if the attribute is defined on the type.
+        retrieve_from_base = self._retrieve_from_base(name)
+        # (1) Check if the attribute is defined on the type.
         attr_value = getattr(type(self._base), name, None)
         if attr_value is None:
             # If not, then it is an instance field, and we forward.
-            return getattr(self._base, name)
-        # (3) If the attribute is defined on the type, and it is marked as
+            return retrieve_from_base(self)
+        # (2) If the attribute is defined on the type, and it is marked as
         #     "mutating", then we clear the memoization cache.
         if mutating.is_instance(attr_value):
-            wrapped = getattr(self._base, name)
-            def cache_clearing_function(*args, **kwargs):
-                self._per_function_cache.clear()
-                return wrapped(*args, **kwargs)
-            return cache_clearing_function
-        # (4) If the attribute is marked as "mutation_safe_memoized", then check the
+            return self._cache_clearing_function(name)
+        # (3) If the attribute is marked as "mutation_safe_memoized", then check the
         #     memoization cache and/or call the function.
         if mutation_safe_memoized.is_instance(attr_value):
-            cur_cache = self._per_function_cache[name]
-            wrapped = getattr(self._base, name)
-            def mutation_safe_memoized_function(*args, **kwargs):
-                key_args = args[1:] if args[0] is self else args
-                key = key_args + tuple((k, kwargs[k]) for k in sorted(kwargs.keys()))
-                if key not in cur_cache:
-                    cur_cache[key] = wrapped(*args, **kwargs)
-                return cur_cache[key]
-            return mutation_safe_memoized_function
-        return getattr(self._base, name)
-
+            return self._mutation_safe_memoized_function(name)
+        # (4) If it's non-mutating, then just apply to the base instance.
+        return retrieve_from_base(self)
 
 class MemoizingIteratorWrapper(object):
     def __init__(self, source):
