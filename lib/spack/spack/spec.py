@@ -4478,6 +4478,12 @@ class CowSpec(lang.Cow):
     def __getitem__(self, key):
         return self._base[key]
 
+    def __repr__(self):
+        return repr(self._base)
+
+    def __str__(self):
+        return str(self._base)
+
 
 class LazySpecCache(collections.defaultdict):
     """Cache for Specs that uses a spec_like as key, and computes lazily
