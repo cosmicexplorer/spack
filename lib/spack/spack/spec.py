@@ -1311,7 +1311,7 @@ class Spec(object):
             (self.name if self.name else ''))
 
     @property
-    @lang.memoized
+    @lang.memoized(key_factory=id)
     def root(self):
         """Follow dependent links and find the root of this spec's DAG.
 
@@ -2344,14 +2344,18 @@ class Spec(object):
               this are infrequent, but should implement this before it is
               a problem.
         """
+        if not isinstance(self, lang.MutationSafeMemoized):
+            self = lang.MutationSafeMemoized(self)
+
         # Make an index of stuff this spec already provides
-        self_index = spack.provider_index.ProviderIndex(self.traverse(), restrict=True)
+        self_index = spack.provider_index.ProviderIndex.generate_self_index(
+            self.traverse(), restrict=True)
         changed = False
         done = False
 
         while not done:
             done = True
-            for spec in list(self.traverse()):
+            for spec in self.traverse():
                 if spec.external:
                     continue
                 replacement = None
@@ -4484,12 +4488,6 @@ class CowSpec(lang.Cow):
 
     def __getitem__(self, key):
         return self._base[key]
-
-    def __repr__(self):
-        return repr(self._base)
-
-    def __str__(self):
-        return str(self._base)
 
 
 class LazySpecCache(collections.defaultdict):

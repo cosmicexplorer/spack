@@ -55,7 +55,9 @@ from spack.version import Version, VersionList, VersionRange, ver
 _abi = llnl.util.lang.Singleton(lambda: spack.abi.ABI())
 
 
-@llnl.util.lang.memoized
+@llnl.util.lang.memoized(
+    key_factory=lambda spec, abi_exemplar: (id(spec), id(abi_exemplar)),
+)
 def _spec_is_compatible_with(spec, abi_exemplar):
     # type: (spack.spec.Spec, spack.spec.Spec) -> Tuple[bool, bool]
     return (
@@ -101,7 +103,7 @@ class Concretizer(object):
         changed |= spec.constrain(dev_info['spec'])
         return changed
 
-    @llnl.util.lang.memoized
+    @llnl.util.lang.memoized(key_factory=lambda self, spec: (id(self), id(spec)))
     def _valid_virtuals_and_externals(self, spec):
         """Returns a list of candidate virtual dep providers and external
            packages that could be used to concretize a spec.
@@ -791,56 +793,26 @@ def find_spec(
     return spec.find_spec(condition, default=default)
 
 
-class NoneCoalescingCache(MutableMapping):
-    """A pretend dict which caches nothing except a None result.
-
-    After any None value is inserted into this mapping, it will then claim that it
-    contains any key asked of it, while returning None for every access.
-    """
-
-    def __init__(self):
-        self._received_none = False
-        self._last_value = None
-
-    def __getitem__(self, _key):
-        # TODO: unclear if this is wildly wrong behavior, that being said it is the v1
-        # concretize path so maybe that's ok?
-        if self._received_none:
-            return None
-        return self._last_value
-
-    def __setitem__(self, _key, value):
-        if value is None:
-            self._received_none = True
-            return
-        self._last_value = value
-
-    def __iter__(self):
-        raise NotImplementedError(self)
-
-    def __len__(self):
-        raise NotImplementedError(self)
-
-    def __delitem__(self, key):
-        raise NotImplementedError(self)
-
-    def __contains__(self, _key):
-        if self._received_none:
-            return True
-        return False
-
-
-@llnl.util.lang.memoized(cache_factory=NoneCoalescingCache)
 def find_spec_with_compiler(spec):
     # type: (spack.spec.Spec) -> Optional[spack.spec.Spec]
-    return find_spec(spec, FindCompiler(), default=None)
+    if find_spec_with_compiler._received_none:
+        return None
+    ret = find_spec(spec, FindCompiler(), default=None)
+    if ret is None:
+        find_spec_with_compiler._received_none = True
+    return ret
+find_spec_with_compiler._received_none = False
 
 
-# FIXME: this memoization is completely wrong for this method, but it *is* fast!
-@llnl.util.lang.memoized(cache_factory=NoneCoalescingCache)
 def find_spec_with_os(spec, new_plat):
     # type: (spack.spec.Spec, spack.architecture.Platform) -> Optional[spack.spec.Spec]
-    return find_spec(spec, FindOs(new_plat), default=None)
+    if find_spec_with_os._received_none:
+        return None
+    ret = find_spec(spec, FindOs(new_plat), default=None)
+    if ret is None:
+        find_spec_with_os._received_none = True
+    return ret
+find_spec_with_os._received_none = False
 
 
 def _compiler_concretization_failure(compiler_spec, arch):

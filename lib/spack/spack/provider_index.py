@@ -8,6 +8,8 @@ from collections import defaultdict
 
 import six
 
+from llnl.util.lang import memoized, standard_key_factory
+
 import spack.spec
 import spack.error
 import spack.util.spack_json as sjson
@@ -133,6 +135,13 @@ class _IndexBase(object):
 
 
 class ProviderIndex(_IndexBase):
+    @classmethod
+    @memoized(
+        key_factory=lambda _cls, *args, **kwargs: standard_key_factory(*args, **kwargs),
+    )
+    def generate_self_index(cls, *args, **kwargs):
+        return cls(*args, **kwargs)
+
     def __init__(self, specs=None, restrict=False):
         """Provider index based on a single mapping of providers.
 

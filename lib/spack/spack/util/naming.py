@@ -45,7 +45,7 @@ _lua_name = re.compile('^(lua)([^-])')
 _bpp_name = re.compile('^(bpp)([^-])')
 
 
-@memoized
+@memoized(key_factory=lambda mod_name: mod_name)
 def mod_to_class(mod_name):
     # type: (str) -> str
     """Convert a name from module style to class name style.  Spack mostly

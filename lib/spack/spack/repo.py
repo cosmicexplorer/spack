@@ -663,7 +663,7 @@ class RepoPath(object):
         """Time a package file in this repo was last updated."""
         return max(repo.last_mtime() for repo in self.repos)
 
-    @llnl.util.lang.memoized
+    @llnl.util.lang.memoized(key_factory=lambda self, spec: (id(self), id(spec)))
     def repo_for_pkg(self, spec):
         """Given a spec, get the repository for its package."""
         # We don't @_autospec this function b/c it's called very frequently
@@ -1162,7 +1162,7 @@ class Repo(object):
 
         return self._modules[pkg_name]
 
-    @llnl.util.lang.memoized
+    @llnl.util.lang.memoized(key_factory=lambda self, pkg_name: (id(self), pkg_name))
     def get_pkg_class(self, pkg_name):
         # type: (str) -> Type
         """Get the class for the package out of its module.

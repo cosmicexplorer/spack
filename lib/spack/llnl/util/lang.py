@@ -472,7 +472,7 @@ def lazy_lexicographic_ordering(cls, set_hash=True, cache_iter=False):
                 return True
             return self._cmp_tup() >= other._cmp_tup()
 
-        @memoized
+        @memoized(key_factory=id)
         def h(self):
             return hash(self._cmp_tup())
     else:
@@ -563,6 +563,12 @@ class Cow(object):
         self._base = base
         self._copied = None
 
+    def __repr__(self):
+        return repr(self._base)
+
+    def __str__(self):
+        return str(self._base)
+
     def __getattr__(self, name):
         # (1) If we refer  to our own attributes, do not forward.
         if name in ['__init__', '_base', '_copied']:
@@ -606,7 +612,7 @@ class MutationSafeMemoized(object):
     def __ne__(self, other):
         return not self == other
 
-    @memoized
+    @memoized(key_factory=lambda self, name: (id(self), name))
     def __getattr__(self, name):
         # (1) If we refer  to our own attributes, do not forward.
         if name in ['__init__', '_base', '_per_function_cache', '__hash__']:
