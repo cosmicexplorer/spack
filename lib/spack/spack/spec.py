@@ -2344,9 +2344,6 @@ class Spec(object):
               this are infrequent, but should implement this before it is
               a problem.
         """
-        if not isinstance(self, lang.MutationSafeMemoized):
-            self = lang.MutationSafeMemoized(self)
-
         # Make an index of stuff this spec already provides
         self_index = spack.provider_index.ProviderIndex.generate_self_index(
             self.traverse(), restrict=True)
@@ -2471,6 +2468,8 @@ class Spec(object):
 
         changed = True
         force = False
+
+        self = lang.MutationSafeMemoized(self)
 
         user_spec_deps = self.flat_dependencies(copy=False)
         concretizer = spack.concretize.Concretizer(self.copy())
