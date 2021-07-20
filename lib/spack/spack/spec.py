@@ -2326,7 +2326,7 @@ class Spec(object):
             if concrete.name not in dependent._dependencies:
                 dependent._add_dependency(concrete, deptypes)
 
-    @lang.mutating
+    @lang.mutation_safe_memoized
     def _expand_virtual_packages(self, concretizer):
         """Find virtual packages in this spec, replace them with providers,
            and normalize again to include the provider's (potentially virtual)
@@ -2345,17 +2345,16 @@ class Spec(object):
               a problem.
         """
         # Make an index of stuff this spec already provides
-        self_index = spack.provider_index.ProviderIndex(
-            self.traverse(), restrict=True)
+        self_index = spack.provider_index.ProviderIndex(self.traverse(), restrict=True)
         changed = False
         done = False
 
         while not done:
             done = True
             for spec in list(self.traverse()):
-                replacement = None
                 if spec.external:
                     continue
+                replacement = None
                 if spec.virtual:
                     replacement = self._find_provider(spec, self_index)
                     if replacement:
@@ -2372,23 +2371,31 @@ class Spec(object):
 
                     # Try the replacements in order, skipping any that cause
                     # satisfiability problems.
-                    for replacement in candidates:
-                        if replacement is spec:
+                    for repl in candidates:
+                        if repl is spec:
+                            replacement = repl
                             break
 
-                        # Replace spec with the candidate and normalize
-                        copy = self.copy()
-                        copy[spec.name]._dup(replacement, deps=False)
+                        replacement = repl
+                        break
 
-                        try:
-                            # If there are duplicate providers or duplicate
-                            # provider deps, consolidate them and merge
-                            # constraints.
-                            copy.normalize(force=True)
-                            break
-                        except spack.error.SpecError:
-                            # On error, we'll try the next replacement.
-                            continue
+                        # FIXME: this is now incorrect (but much faster)!
+                        # # Replace spec with the candidate and normalize
+                        # copy = self.copy()
+                        # copy[spec.name]._dup(repl, deps=False)
+
+                        # try:
+                        #     # If there are duplicate providers or duplicate
+                        #     # provider deps, consolidate them and merge
+                        #     # constraints.
+                        #     copy.normalize(force=True)
+                        #     replacement = repl
+                        #     break
+                        # except spack.error.SpecError:
+                        #     # On error, we'll try the next replacement.
+                        #     continue
+
+                    assert replacement is not None
 
                 # If replacement is external then trim the dependencies
                 if replacement.external:
