@@ -1363,6 +1363,14 @@ class Spec(object):
         """
         return spack.repo.path.get_pkg_class(self.fullname)
 
+    @staticmethod
+    @lang.memoized(key_factory=lambda name: name)
+    def _cached_is_virtual(name):
+        return spack.repo.path.is_virtual(name, use_index=False)
+
+    def cached_is_virtual(self):
+        return self._cached_is_virtual(self.name)
+
     @property
     def virtual(self):
         """Right now, a spec is virtual if no package exists with its name.
@@ -1473,7 +1481,7 @@ class Spec(object):
             **kwargs))
 
     def _traverse_edges_2(self, visited=None, d=0, deptype='all',
-                       dep_spec=None, **kwargs):
+                          dep_spec=None, **kwargs):
         # get initial values for kwargs
         depth = kwargs.get('depth', False)
         key_fun = kwargs.get('key', id)
@@ -2356,7 +2364,7 @@ class Spec(object):
                 if spec.external:
                     continue
                 replacement = None
-                if spec.virtual:
+                if spec.cached_is_virtual():
                     replacement = self._find_provider(spec, self_index)
                     if replacement:
                         # TODO: may break if in-place on self but
