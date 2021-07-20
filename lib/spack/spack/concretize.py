@@ -101,9 +101,10 @@ class Concretizer(object):
         changed |= spec.constrain(dev_info['spec'])
         return changed
 
+    @llnl.util.lang.memoized
     def _valid_virtuals_and_externals(self, spec):
         """Returns a list of candidate virtual dep providers and external
-           packages that coiuld be used to concretize a spec.
+           packages that could be used to concretize a spec.
 
            Preferred specs come first in the list.
         """
