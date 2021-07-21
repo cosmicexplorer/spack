@@ -15,6 +15,7 @@ import re
 import shutil
 import tempfile
 import xml.etree.ElementTree
+from typing import Dict  # novm
 
 import py
 import pytest
@@ -1361,7 +1362,7 @@ repo:
 class MockBundle(object):
     has_code = False
     name = 'mock-bundle'
-    versions = {}  # type: ignore
+    versions = {}  # type: Dict
 
 
 @pytest.fixture
