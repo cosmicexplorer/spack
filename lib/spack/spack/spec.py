@@ -2303,7 +2303,7 @@ class Spec(object):
             # Concretize virtual dependencies last.  Because they're added
             # to presets below, their constraints will all be merged, but we'll
             # still need to select a concrete package later.
-            if not self.virtual:
+            if not self.cached_is_virtual():
                 changed |= any(
                     (concretizer.concretize_develop(self),  # special variant
                      concretizer.concretize_architecture(self),
@@ -2321,7 +2321,7 @@ class Spec(object):
     @lang.mutating
     def _replace_with(self, concrete):
         """Replace this virtual spec with a concrete spec."""
-        assert(self.virtual)
+        assert(self.cached_is_virtual())
         for name, dep_spec in self._dependents.items():
             dependent = dep_spec.parent
             deptypes = dep_spec.deptypes
@@ -2333,6 +2333,11 @@ class Spec(object):
             # add the replacement, unless it is already a dep of dependent.
             if concrete.name not in dependent._dependencies:
                 dependent._add_dependency(concrete, deptypes)
+
+    @property
+    @lang.memoized_method
+    def _virtual_expansions_done(self):
+        return set()
 
     @lang.mutation_safe_memoized
     def _expand_virtual_packages(self, concretizer):
@@ -2358,19 +2363,32 @@ class Spec(object):
         changed = False
         done = False
 
+        # tty.msg('self: {0}'.format(self))
+
+        did_anything = None
         while not done:
             done = True
+            if did_anything is False:
+                break
             for spec in self.traverse():
                 if spec.external:
+                    continue
+                if spec.name in self._virtual_expansions_done:
                     continue
                 replacement = None
                 if spec.cached_is_virtual():
                     replacement = self._find_provider(spec, self_index)
                     if replacement:
+                        if replacement == spec:
+                            continue
                         # TODO: may break if in-place on self but
                         # shouldn't happen if root is traversed first.
                         spec._replace_with(replacement)
                         done = False
+                        # tty.msg('replacement: {0}({1}/{2})'
+                        #         .format(replacement, id(replacement), id(spec)))
+                        self._virtual_expansions_done.add(spec.name)
+                        did_anything = True
                         break
 
                 if not replacement:
@@ -2416,26 +2434,12 @@ class Spec(object):
                     replacement._dependencies = DependencyMap()
                     replacement.architecture = self.architecture
 
-                # TODO: could this and the stuff in _dup be cleaned up?
-                def feq(cfield, sfield):
-                    return (not cfield) or (cfield == sfield)
-
-                if replacement is spec or (
-                        feq(replacement.name, spec.name) and
-                        feq(replacement.versions, spec.versions) and
-                        feq(replacement.compiler, spec.compiler) and
-                        feq(replacement.architecture, spec.architecture) and
-                        feq(replacement._dependencies, spec._dependencies) and
-                        feq(replacement.variants, spec.variants) and
-                        feq(replacement.external_path,
-                            spec.external_path) and
-                        feq(replacement.external_modules,
-                            spec.external_modules)):
+                if replacement == spec:
                     continue
                 # Refine this spec to the candidate. This uses
                 # replace_with AND dup so that it can work in
                 # place. TODO: make this more efficient.
-                if spec.virtual:
+                if spec.cached_is_virtual():
                     spec._replace_with(replacement)
                     changed = True
                 if spec._dup(replacement, deps=False, cleardeps=False):
@@ -2444,7 +2448,11 @@ class Spec(object):
                 spec._dependencies.owner = spec
                 self_index.update(spec)
                 done = False
+                # tty.msg('spec: {0}'.format(spec))
+                self._virtual_expansions_done.add(spec.name)
+                did_anything = True
                 break
+            did_anything = False
 
         return changed
 
@@ -2664,7 +2672,7 @@ class Spec(object):
         opt, i, answer = min(result.answers)
         name = self.name
         # TODO: Consolidate this code with similar code in solve.py
-        if self.virtual:
+        if self.cached_is_virtual():
             providers = [spec.name for spec in answer.values()
                          if spec.package.provides(name)]
             name = providers[0]
@@ -2780,6 +2788,7 @@ class Spec(object):
             dm[spec.name] = spec
         return dm
 
+    @lang.mutation_safe_memoized
     def _evaluate_dependency_conditions(self, name):
         """Evaluate all the conditions on a dependency with this name.
 
@@ -2825,7 +2834,7 @@ class Spec(object):
            Raise an exception if there is a conflicting virtual
            dependency already in this spec.
         """
-        assert(vdep.virtual)
+        assert(vdep.cached_is_virtual())
 
         # note that this defensively copies.
         providers = provider_index.providers_for(vdep)
@@ -2892,7 +2901,7 @@ class Spec(object):
 
         # If it's a virtual dependency, try to find an existing
         # provider in the spec, and merge that.
-        if dep.virtual:
+        if dep.cached_is_virtual():
             visited.add(dep.name)
             provider = self._find_provider(dep, provider_index)
             if provider:
@@ -2901,7 +2910,7 @@ class Spec(object):
             index = spack.provider_index.ProviderIndex([dep], restrict=True)
             items = list(spec_deps.items())
             for name, vspec in items:
-                if not vspec.virtual:
+                if not vspec.cached_is_virtual():
                     continue
 
                 if index.providers_for(vspec):
@@ -2966,7 +2975,7 @@ class Spec(object):
 
         # If we descend into a virtual spec, there's nothing more
         # to normalize.  Concretize will finish resolving it later.
-        if self.virtual or self.external:
+        if self.cached_is_virtual() or self.external:
             return False
 
         # Avoid recursively adding constraints for already-installed packages:
@@ -3088,7 +3097,7 @@ class Spec(object):
         # FIXME: raise just the first one encountered
         for spec in self.traverse():
             # raise an UnknownPackageError if the spec's package isn't real.
-            if (not spec.virtual) and spec.name:
+            if (not spec.cached_is_virtual()) and spec.name:
                 spack.repo.get(spec.fullname)
 
             # validate compiler in addition to the package name.
@@ -3097,7 +3106,7 @@ class Spec(object):
                     raise UnsupportedCompilerError(spec.compiler.name)
 
             # Ensure correctness of variants (if the spec is not virtual)
-            if not spec.virtual:
+            if not spec.cached_is_virtual():
                 Spec.ensure_valid_variants(spec)
                 vt.substitute_abstract_variants(spec)
 
@@ -3325,7 +3334,7 @@ class Spec(object):
         # If the names are different, we need to consider virtuals
         if self.name != other.name and self.name and other.name:
             # A concrete provider can satisfy a virtual dependency.
-            if not self.virtual and other.virtual:
+            if not self.cached_is_virtual() and other.cached_is_virtual():
                 try:
                     pkg = spack.repo.get(self.fullname)
                 except spack.repo.UnknownEntityError:
@@ -3446,7 +3455,7 @@ class Spec(object):
 
     def virtual_dependencies(self):
         """Return list of any virtual deps in this spec."""
-        return [spec for spec in self.traverse() if spec.virtual]
+        return [spec for spec in self.traverse() if spec.cached_is_virtual()]
 
     @property  # type: ignore[misc] # decorated prop not supported in mypy
     @lang.memoized
@@ -3667,7 +3676,7 @@ class Spec(object):
                     # Regular specs
                     (x for x in self.traverse() if x.name == name),
                     (x for x in self.traverse()
-                     if (not x.virtual) and x.package.provides(name))
+                     if (not x.cached_is_virtual()) and x.package.provides(name))
                 )
             )
         except StopIteration:
