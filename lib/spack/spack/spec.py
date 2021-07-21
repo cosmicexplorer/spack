@@ -2270,6 +2270,10 @@ class Spec(object):
         )
         validate_fn(self, self.extra_attributes)
 
+    @lang.memoized_method
+    def _concretize_hacky_done_cache(self):
+        return set()
+
     @lang.mutating
     def _concretize_helper(self, concretizer, presets=None, visited=None):
         """Recursive helper function for concretize().
@@ -2293,9 +2297,12 @@ class Spec(object):
 
         # Concretize deps first -- this is a bottom-up process.
         for name in sorted(self._dependencies.keys()):
+            if name in self._concretize_hacky_done_cache():
+                continue
             changed |= self._dependencies[name].spec._concretize_helper(
                 concretizer, presets, visited
             )
+            self._concretize_hacky_done_cache().add(name)
 
         if self.name in presets:
             changed |= self.constrain(presets[self.name])
@@ -2862,6 +2869,10 @@ class Spec(object):
             elif required:
                 raise UnsatisfiableProviderSpecError(required[0], vdep)
 
+    @lang.memoized_method
+    def _merged_deps(self):
+        return set()
+
     @lang.mutating
     def _merge_dependency(
             self, dependency, visited, spec_deps, provider_index, tests):
@@ -2992,6 +3003,8 @@ class Spec(object):
         while changed:
             changed = False
             for dep_name in self.package_class.dependencies:
+                if dep_name in self._merged_deps():
+                    continue
                 # Do we depend on dep_name?  If so pkg_dep is not None.
                 dep = self._evaluate_dependency_conditions(dep_name)
 
@@ -3001,6 +3014,7 @@ class Spec(object):
                     # seems to be expecting a more general treatment?
                     merge = tests or not dep.is_test_only
                     if merge:
+                        self._merged_deps().add(dep_name)
                         changed |= self._merge_dependency(
                             dep, visited, spec_deps, provider_index, tests)
             any_change |= changed
