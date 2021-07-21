@@ -36,7 +36,7 @@ from functools_backport import reverse_order
 import archspec.cpu
 
 import llnl.util.filesystem as fs
-import llnl.util.lang
+import llnl.util.lang as lang
 import llnl.util.tty as tty
 
 import spack.abi
@@ -52,12 +52,10 @@ from spack.package_prefs import PackagePrefs, is_spec_buildable, spec_externals
 from spack.version import Version, VersionList, VersionRange, ver
 
 #: impements rudimentary logic for ABI compatibility
-_abi = llnl.util.lang.Singleton(lambda: spack.abi.ABI())
+_abi = lang.Singleton(lambda: spack.abi.ABI())
 
 
-@llnl.util.lang.memoized(
-    key_factory=lambda spec, abi_exemplar: (id(spec), id(abi_exemplar)),
-)
+@lang.memoized(key_factory=lambda spec, abi_exemplar: (id(spec), id(abi_exemplar)))
 def _spec_is_compatible_with(spec, abi_exemplar):
     # type: (spack.spec.Spec, spack.spec.Spec) -> Tuple[bool, bool]
     return (
@@ -103,7 +101,7 @@ class Concretizer(object):
         changed |= spec.constrain(dev_info['spec'])
         return changed
 
-    @llnl.util.lang.memoized(key_factory=lambda self, spec: (id(self), id(spec)))
+    @lang.memoized(key_factory=lambda self, spec: (id(self), id(spec)))
     def _valid_virtuals_and_externals(self, spec):
         """Returns a list of candidate virtual dep providers and external
            packages that could be used to concretize a spec.
@@ -407,6 +405,10 @@ class Concretizer(object):
 
         return changed
 
+    @lang.memoized_method
+    def _concretized_compiler_success_set(self):
+        return set()
+
     def concretize_compiler(self, spec):
         """If the spec already has a compiler, we're done.  If not, then take
            the compiler used for the nearest ancestor with a compiler
@@ -419,6 +421,14 @@ class Concretizer(object):
            build with the compiler that will be used by libraries that
            link to this one, to maximize compatibility.
         """
+        if id(spec) in self._concretized_compiler_success_set():
+            return False
+        ret = self._concretize_compiler_1(spec)
+        if ret:
+            self._concretized_compiler_success_set().add(id(spec))
+        return ret
+
+    def _concretize_compiler_1(self, spec):
         # Pass on concretizing the compiler if the target or operating system
         # is not yet determined
         if not spec.architecture.concrete:
@@ -511,12 +521,24 @@ class Concretizer(object):
         assert spec.compiler.concrete
         return True  # things changed.
 
+    @lang.memoized_method
+    def _flags_success_set(self):
+        return set()
+
     def concretize_compiler_flags(self, spec):
         """
         The compiler flags are updated to match those of the spec whose
         compiler is used, defaulting to no compiler flags in the spec.
         Default specs set at the compiler level will still be added later.
         """
+        if id(spec) in self._flags_success_set():
+            return False
+        ret = self._concretize_compiler_flags_1(spec)
+        if ret:
+            self._flags_success_set().add(id(spec))
+        return ret
+
+    def _concretize_compiler_flags_1(self, spec):
         # Pass on concretizing the compiler flags if the target or operating
         # system is not set.
         if not spec.architecture.concrete:
@@ -542,7 +564,7 @@ class Concretizer(object):
                 flags = spec.compiler_flags.get(flag, [])
                 if set(nearest_flags) - set(flags):
                     spec.compiler_flags[flag] = list(
-                        llnl.util.lang.dedupe(nearest_flags + flags)
+                        lang.dedupe(nearest_flags + flags)
                     )
                     ret = True
             except StopIteration:
@@ -562,12 +584,16 @@ class Concretizer(object):
             config_flags = compiler.flags.get(flag, [])
             flags = spec.compiler_flags.get(flag, [])
             spec.compiler_flags[flag] = list(
-                llnl.util.lang.dedupe(config_flags + flags)
+                lang.dedupe(config_flags + flags)
             )
             if set(config_flags) - set(flags):
                 ret = True
 
         return ret
+
+    @lang.memoized_method
+    def _target_success_set(self):
+        return set()
 
     def adjust_target(self, spec):
         """Adjusts the target microarchitecture if the compiler is too old
@@ -579,6 +605,14 @@ class Concretizer(object):
         Returns:
             True if spec was modified, False otherwise
         """
+        if id(spec) in self._target_success_set():
+            return False
+        ret = self._adjust_target_1(spec)
+        if ret:
+            self._target_success_set().add(id(spec))
+        return ret
+
+    def _adjust_target_1(self, spec):
         # To minimize the impact on performance this function will attempt
         # to adjust the target only at the very first call once necessary
         # information is set. It will just return False on subsequent calls.

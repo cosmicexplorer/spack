@@ -2270,10 +2270,6 @@ class Spec(object):
         )
         validate_fn(self, self.extra_attributes)
 
-    @lang.memoized_method
-    def _concretize_hacky_done_cache(self):
-        return set()
-
     @lang.mutating
     def _concretize_helper(self, concretizer, presets=None, visited=None):
         """Recursive helper function for concretize().
@@ -2297,29 +2293,28 @@ class Spec(object):
 
         # Concretize deps first -- this is a bottom-up process.
         for name in sorted(self._dependencies.keys()):
-            if name in self._concretize_hacky_done_cache():
-                continue
             changed |= self._dependencies[name].spec._concretize_helper(
                 concretizer, presets, visited
             )
-            self._concretize_hacky_done_cache().add(name)
 
         if self.name in presets:
+            tty.msg('self: {0}'.format(self))
+            tty.msg('presets: {0}'.format(presets[self.name]))
             changed |= self.constrain(presets[self.name])
         else:
             # Concretize virtual dependencies last.  Because they're added
             # to presets below, their constraints will all be merged, but we'll
             # still need to select a concrete package later.
             if not self.cached_is_virtual():
-                changed |= any(
-                    (concretizer.concretize_develop(self),  # special variant
-                     concretizer.concretize_architecture(self),
-                     concretizer.concretize_compiler(self),
-                     concretizer.adjust_target(self),
-                     # flags must be concretized after compiler
-                     concretizer.concretize_compiler_flags(self),
-                     concretizer.concretize_version(self),
-                     concretizer.concretize_variants(self)))
+                changes = (concretizer.concretize_develop(self),  # special variant
+                           concretizer.concretize_architecture(self),
+                           concretizer.concretize_compiler(self),
+                           concretizer.adjust_target(self),
+                           # flags must be concretized after compiler
+                           concretizer.concretize_compiler_flags(self),
+                           concretizer.concretize_version(self),
+                           concretizer.concretize_variants(self))
+                changed |= any(changes)
             presets[self.name] = self
 
         visited.add(self.name)
@@ -2496,13 +2491,17 @@ class Spec(object):
 
         user_spec_deps = self.flat_dependencies(copy=False)
         concretizer = spack.concretize.Concretizer(self.copy())
+        visited = set()
         while changed:
             changes = (self.normalize(force, tests=tests,
                                       user_spec_deps=user_spec_deps),
                        self._expand_virtual_packages(concretizer),
-                       self._concretize_helper(concretizer))
+                       self._concretize_helper(concretizer, visited=visited))
             changed = any(changes)
-            force = True
+            # force = True
+
+        if self.compiler is None:
+            self.compiler = next(iter(spack.compilers.all_compiler_specs()))
 
         visited_user_specs = set()
         for dep in self.traverse():
@@ -3049,8 +3048,6 @@ class Spec(object):
 
         if self._normal:
             return False
-
-        self = lang.MutationSafeMemoized(self)
 
         # Ensure first that all packages & compilers in the DAG exist.
         self.validate_or_raise()
