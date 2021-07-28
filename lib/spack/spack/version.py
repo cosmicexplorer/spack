@@ -708,20 +708,266 @@ class Version(VersionPredicate['Version']):
         self.commit_lookup.save()
 
 
+def _endpoint_only(fun):
+    """We want to avoid logic that handles any type of version range, just endpoints."""
+    @wraps(fun)
+    def validate_endpoint_argument(self, other):
+        assert isinstance(other, VersionEndpoint), (
+            "required two VersionEndpoint arguments, received {0} and {1}"
+            .format(self, other))
+        return fun(self, other)
+    return validate_endpoint_argument
+
+
+_EndpointLocation = TypeVar('_EndpointLocation', Literal['left'], Literal['right'])
+
+
+class VersionEndpoint(Generic[_EndpointLocation]):
+    value = None                                            # type: Optional[Version]
+    location = None                                         # type: _EndpointLocation
+    _negated = None                                         # type: bool
+
+    _valid_endpoint_locations = frozenset([
+        'left', 'right',
+    ])                          # type: ClassVar[FrozenSet[str]]
+
+    @classmethod
+    def wildcard(cls, location):
+        # type: (_EndpointLocation) -> VersionEndpoint[_EndpointLocation]
+        return cls(value=None, location=location, negated=False)
+
+    @classmethod
+    def left(cls, v, negated=False):
+        # type: (Optional[str], bool) -> VersionEndpoint[Literal['left']]
+        ver = Version(v) if v is not None else v
+        return cls(ver, 'left',   # type: ignore[arg-type, return-value]
+                   negated=negated)
+
+    @classmethod
+    def right(cls, v, negated=False):
+        # type: (Optional[str], bool) -> VersionEndpoint[Literal['right']]
+        ver = Version(v) if v is not None else v
+        return cls(ver, 'right',   # type: ignore[arg-type, return-value]
+                   negated=negated)
+
+    @property
+    def is_wildcard(self):
+        # type: () -> bool
+        return self.value is None
+
+    @property
+    def polarity(self):
+        # type: () -> bool
+        return not self._negated
+
+    def negated(self):
+        # type: () -> VersionEndpoint[_EndpointLocation]
+        return VersionEndpoint(self.value, self.location, negated=not self._negated)
+
+    def __init__(self, value, location, negated=False):
+        # type: (Optional[Version], _EndpointLocation, bool) -> None
+        assert value is None or isinstance(value, Version), value
+        assert location in self._valid_endpoint_locations, location
+
+        self.value = value
+        self.location = location
+        self._negated = negated
+
+    def __repr__(self):
+        # type: () -> str
+        return ("VersionEndpoint(value={0!r}, location={1!r}, negated={2!r})"
+                .format(self.value, self.location, self._negated))
+
+    def __str__(self):
+        # type: () -> str
+        ver_str = '*' if self.is_wildcard else str(self.value)
+        polarity = '+' if self.polarity else '-'
+        locator = '<' if self.location == 'left' else '>'
+        return '{0}{1}{2}'.format(ver_str, polarity, locator)
+
+    def __hash__(self):
+        # type: () -> int
+        return hash((self.value, self.location))
+
+    def __contains__(self, other):
+        # type: (VersionEndpoint) -> bool
+        # return not (other < self or other > self)
+        if self.is_wildcard:
+            return True
+        if other.is_wildcard:
+            return False
+        polarities_match = self.polarity == other.polarity
+        if self.location == 'right':
+            if other.location == 'left':
+                return other.value < self.value or other.value in self.value
+            if other.value in self.value:
+                return polarities_match
+            return other.value < self.value
+        assert self.location == 'left', self
+        if other.location == 'right':
+            return other.value > self.value or other.value in self.value
+        if other.value in self.value:
+            return polarities_match
+        return other.value > self.value
+
+    def satisfies(self, other):
+        # type: (VersionEndpoint) -> bool
+        return self in other
+
+    def lowest(self):
+        # type: () -> Optional[Version]
+        if self.location == 'left':
+            if self.is_wildcard:
+                return None
+            return self.value.lowest()
+        return None
+
+    def highest(self):
+        # type: () -> Optional[Version]
+        if self.location == 'right':
+            if self.is_wildcard:
+                return None
+            return self.value.highest()
+        return None
+
+    def __eq__(self, other):
+        # type: (Any) -> bool
+        if not isinstance(other, VersionEndpoint):
+            return NotImplemented
+        return (self.value == other.value and
+                self.location == other.location and
+                self.polarity == other.polarity)
+
+    # TODO: consider @memoized since we impl __hash__?
+    @_endpoint_only
+    def __lt__(self, other):
+        # type: (VersionEndpoint) -> bool
+        # assert not (
+        #     self.location == 'right' or other.location == 'right'), (self, other)
+        # assert self.location == other.location, (self, other)
+        if self.is_wildcard:
+            return True
+        if other.is_wildcard:
+            return False
+        if self.location == other.location:
+            if self.value == other.value:
+                if self.polarity and not other.polarity:
+                    return False if self.location == 'right' else True
+                if other.polarity and not self.polarity:
+                    return True if self.location == 'right' else False
+        return self.value < other.value
+
+    @_endpoint_only
+    def __gt__(self, other):
+        # type: (VersionEndpoint) -> bool
+        # assert not (
+        #     self.location == 'left' or other.location == 'left'), (self, other)
+        # assert self.location == other.location, (self, other)
+        if self.is_wildcard:
+            return True
+        if other.is_wildcard:
+            return False
+        if self.location == other.location:
+            if self.value == other.value:
+                if self.polarity and not other.polarity:
+                    return False if self.location == 'left' else True
+                if other.polarity and not self.polarity:
+                    return True if self.location == 'left' else False
+        return self.value > other.value
+
+    def __ne__(self, other):
+        # type: (Any) -> bool
+        if not isinstance(other, VersionEndpoint):
+            return NotImplemented
+        return not (self == other)
+
+    @_endpoint_only
+    def __le__(self, other):
+        # type: (VersionEndpoint) -> bool
+        return self == other or self < other
+
+    @_endpoint_only
+    def __ge__(self, other):
+        # type: (VersionEndpoint) -> bool
+        return self == other or self < other
+
+
 class VersionRange(VersionPredicate['VersionRange']):
     start = None  # type: Optional[Version]
     end = None    # type: Optional[Version]
 
     @classmethod
-    def parse(cls, s):
-        raise NotImplementedError(s)
+    def from_single_version(cls, version):
+        # type: (Version) -> VersionRange
+        return cls(start=VersionEndpoint(version, 'left'),
+                   end=VersionEndpoint(version, 'right'))
+
+    @classmethod
+    def parse(cls, string):
+        # type: (str) -> VersionRange
+        if string.startswith(':'):
+            if string.startswith(':!'):
+                if string.endswith('!:'):
+                    # :!<x>!:
+                    version = Version.parse(string[2:-2])
+                    return VersionRange(
+                        start=VersionEndpoint(version, 'left', negated=True),
+                        end=VersionEndpoint(version, 'right', negated=True),
+                    )
+                assert not string.endswith(':'), string
+                # :!<x>
+                version = Version.parse(string[2:])
+                return VersionRange(
+                    start=VersionEndpoint.wildcard('left'),
+                    end=VersionEndpoint(version, 'right', negated=True))
+            if string.endswith(':'):
+                # :
+                # We ban :!<x>: and :<x>:.
+                assert string == ':', string
+                return VersionRange(
+                    start=VersionEndpoint.wildcard('left'),
+                    end=VersionEndpoint.wildcard('right'))
+            # :<x>
+            version = Version.parse(string[1:])
+            return VersionRange(
+                start=VersionEndpoint.wildcard('left'),
+                end=VersionEndpoint(version, 'right'))
+        if string.endswith(':'):
+            if string.endswith('!:'):
+                # <x>!:
+                version = Version.parse(string[:-2])
+                return VersionRange(
+                    start=VersionEndpoint(version, 'left', negated=True),
+                    end=VersionEndpoint.wildcard('right'))
+            # <x>:
+            version = Version.parse(string[:-1])
+            return VersionRange(
+                start=VersionEndpoint(version, 'left'),
+                end=VersionEndpoint.wildcard('right'))
+        if ':' in string:
+            # <x>:<x> | <x>!:<x> | <x>:!<x> | <x>!:!<x>
+            start_version, end_version = tuple(string.split(':'))
+            if start_version.endswith('!'):
+                start = VersionEndpoint(Version.parse(start_version[:-1]), 'left',
+                                        negated=True)
+            else:
+                start = VersionEndpoint(Version.parse(start_version), 'left')
+            if end_version.startswith('!'):
+                end = VersionEndpoint(Version.parse(end_version[1:]), 'right',
+                                      negated=True)
+            else:
+                end = VersionEndpoint(Version.parse(end_version), 'right')
+            return VersionRange(start=start, end=end)
+        # <x>
+        version = Version.parse(string)
+        return VersionRange.from_single_version(version)
 
     def __init__(self, start, end):
-        # type: (Optional[Union[str, Version]], Optional[Union[str, Version]]) -> None
-        if isinstance(start, string_types):
-            start = Version(start)
-        if isinstance(end, string_types):
-            end = Version(end)
+        # type: (VersionEndpoint, VersionEndpoint) -> None
+        if (start.location != 'left') or (end.location != 'right') or (
+                not start.is_wildcard and not end.is_wildcard and end < start):
+            raise ValueError("Invalid Version range with start {0!r} and end {1!r}"
+                             .format(start, end))
 
         self.start = start
         self.end = end
@@ -742,11 +988,19 @@ class VersionRange(VersionPredicate['VersionRange']):
 
     def lowest(self):
         # type: () -> Optional[Version]
-        return self.start
+        if self.start.polarity:
+            if self.start.value is not None:
+                return self.start.value.lowest()
+            return None
+        return None
 
     def highest(self):
         # type: () -> Optional[Version]
-        return self.end
+        if self.end.polarity:
+            if self.end.value is not None:
+                return self.end.value.highest()
+            return None
+        return None
 
     @coerced
     def __lt__(self, other):
@@ -759,12 +1013,15 @@ class VersionRange(VersionPredicate['VersionRange']):
         if other is None:
             return False
 
+        if self in other:
+            return False
+
         s, o = self, other
-        if s.start != o.start:
-            return s.start is None or (
-                o.start is not None and s.start < o.start)
-        return (s.end != o.end and
-                o.end is None or (s.end is not None and s.end < o.end))
+        if s.start < o.start:
+            return True
+        if s.start > o.start:
+            return False
+        return s.end < o.end
 
     @coerced
     def __eq__(self, other):
@@ -791,12 +1048,28 @@ class VersionRange(VersionPredicate['VersionRange']):
     @coerced
     def __gt__(self, other):
         # type: (VersionRange) -> bool
+        # if other is None:
+        #     return False
+
+        # if self in other:
+        #     return False
+
+        # s, o = self, other
+        # if s.start > o.start:
+        #     return True
+        # if s.start < o.start:
+        #     return False
+        # return s.end > o.end
         return not (self == other) and not (self < other)
 
     @property
     def concrete(self):
         # type: () -> Optional[Version]
-        return self.start if self.start == self.end else None
+        if (self.start == self.end and
+            (not self.start.is_wildcard) and
+            (not self.end.is_wildcard)):
+            return self.start.value
+        return None
 
     @coerced
     def __contains__(self, other):
@@ -804,18 +1077,22 @@ class VersionRange(VersionPredicate['VersionRange']):
         if other is None:
             return False
 
-        in_lower = (self.start == other.start or
-                    self.start is None or
-                    (other.start is not None and (
-                        self.start < other.start or
+        # in_lower = (other.start in self.start and
+        #             other.end in self.start)
+        in_lower = ((self.start == other.start) or
+                    self.start.is_wildcard or
+                    ((not other.start.is_wildcard) and (
+                        (self.start < other.start) or
                         other.start in self.start)))
         if not in_lower:
             return False
 
-        in_upper = (self.end == other.end or
-                    self.end is None or
-                    (other.end is not None and (
-                        self.end > other.end or
+        # in_upper = (other.start in self.end and
+        #             other.end in self.end)
+        in_upper = ((self.end == other.end) or
+                    self.end.is_wildcard or
+                    ((not other.end.is_wildcard) and (
+                        (self.end > other.end) or
                         other.end in self.end)))
         return in_upper
 
@@ -864,48 +1141,47 @@ class VersionRange(VersionPredicate['VersionRange']):
         - 1:2 does not satisfy 3:4, as their intersection is empty.
         - 4.5:4.7 satisfies 4.7.2:4.8, as their intersection is 4.7.2:4.7
         """
+        # return self in other
         return (self.overlaps(other) or
-                # if either self.start or other.end are None, then this can't
+                # if either self.start or other.end are a wildcard, then this can't
                 # satisfy, or overlaps() would've taken care of it.
-                self.start is not None and
-                other.end is not None and
+                not self.start.is_wildcard and
+                not other.end.is_wildcard and
                 self.start.satisfies(other.end))
 
     @coerced
     def overlaps(self, other):
         # type: (VersionRange) -> bool
-        return ((self.start is None or other.end is None or
-                 self.start <= other.end or
+        return ((self.start <= other.end or
                  other.end in self.start or self.start in other.end) and
-                (other.start is None or self.end is None or
-                 other.start <= self.end or
+                (other.start <= self.end or
                  other.start in self.end or self.end in other.start))
 
     @coerced
     def union(self, other):
         # type: (VersionRange) -> VersionPredicate
         if not self.overlaps(other):
-            if (self.end is not None and other.start is not None and
-                    self.end.is_predecessor(other.start)):
+            if (self.end.value is not None and other.start.value is not None and
+                self.end.value.is_predecessor(other.start.value)):
                 return VersionRange(self.start, other.end)
 
-            if (other.end is not None and self.start is not None and
-                    other.end.is_predecessor(self.start)):
+            if (other.end.value is not None and self.start.value is not None and
+                other.end.value.is_predecessor(self.start.value)):
                 return VersionRange(other.start, self.end)
 
             return VersionList([self, other])
 
         # if we're here, then we know the ranges overlap.
-        if self.start is None or other.start is None:
-            start = None
+        if self.start.is_wildcard or other.start.is_wildcard:
+            start = VersionEndpoint.wildcard('left')
         else:
             start = self.start
             # TODO: See note in intersection() about < and in discrepancy.
             if self.start in other.start or other.start < self.start:
                 start = other.start
 
-        if self.end is None or other.end is None:
-            end = None
+        if self.end.is_wildcard or other.end.is_wildcard:
+            end = VersionEndpoint.wildcard('right')
         else:
             end = self.end
             # TODO: See note in intersection() about < and in discrepancy.
@@ -918,16 +1194,17 @@ class VersionRange(VersionPredicate['VersionRange']):
     @coerced
     def intersection(self, other):
         # type: (VersionRange) -> VersionPredicate
+
         if self.overlaps(other):
-            if self.start is None:
+            if self.start.is_wildcard:
                 start = other.start
             else:
                 start = self.start
-                if other.start is not None:
+                if not other.start.is_wildcard:
                     if other.start > start or other.start in start:
                         start = other.start
 
-            if self.end is None:
+            if self.end.is_wildcard:
                 end = other.end
             else:
                 end = self.end
@@ -937,14 +1214,20 @@ class VersionRange(VersionPredicate['VersionRange']):
                 #     1.6 < 1.6.5  = True  (lexicographic)
                 # Should 1.6 NOT be less than 1.6.5?  Hmm.
                 # Here we test (not end in other.end) first to avoid paradox.
-                if other.end is not None and end not in other.end:
+                if not other.end.is_wildcard and end not in other.end:
                     if other.end < end or other.end in end:
                         end = other.end
 
+            if start in end and not start < end:
+                assert start.value is not None
+                return start.value
+            if end in start and not end > start:
+                assert end.value is not None
+                return end.value
+
             return VersionRange(start, end)
 
-        else:
-            return VersionList()
+        return VersionList.empty()
 
     def __hash__(self):
         # type: () -> int
@@ -952,17 +1235,57 @@ class VersionRange(VersionPredicate['VersionRange']):
 
     def __repr__(self):
         # type: () -> str
-        return self.__str__()
+        return 'VersionRange.parse({0!r})'.format(str(self))
 
     def __str__(self):
         # type: () -> str
-        out = ""
-        if self.start:
-            out += str(self.start)
-        out += ":"
-        if self.end:
-            out += str(self.end)
-        return out
+        # ( :!<x>!: | <x> | : )
+        if self.start.value == self.end.value:
+            if self.start.is_wildcard or self.end.is_wildcard:
+                assert self.start.is_wildcard and self.end.is_wildcard, self.end
+                assert self.start.polarity and self.end.polarity, (self.start, self.end)
+                # :
+                return ':'
+            if self.start.polarity or self.end.polarity:
+                assert self.start.polarity and self.end.polarity, (self.start, self.end)
+                # <x>
+                return str(self.start.value)
+            assert not self.start.polarity and not self.end.polarity, (
+                self.start, self.end)
+            # :!<x>!:
+            return ':!{0}!:'.format(self.start.value)
+        # ( :!<x> | :<x> )
+        if self.start.is_wildcard:
+            # Checked that self.start == self.end above.
+            assert not self.end.is_wildcard, self.end
+            assert self.start.polarity, self
+            # :<x>
+            if self.end.polarity:
+                return ':{0}'.format(self.end.value)
+            # :!<x>
+            return ':!{0}'.format(self.end.value)
+        # ( <x>: | <x>!: )
+        if self.end.is_wildcard:
+            assert not self.start.is_wildcard, self.start
+            assert self.end.polarity, self
+            # <x>:
+            if self.start.polarity:
+                return '{0}:'.format(self.start.value)
+            # <x>!:
+            return '{0}!:'.format(self.start.value)
+        # {0}!:!{1} => {0} < x < {1}
+        if (not self.start.polarity and
+            not self.end.polarity):
+            return '{0}!:!{1}'.format(self.start.value, self.end.value)
+        # {0}:!{1} => {0} <= x < {1}
+        if not self.end.polarity:
+            return '{0}:!{1}'.format(self.start.value, self.end.value)
+        # {0}!:{1} => {0} < x <= {1}
+        if not self.start.polarity:
+            return '{0}!:{1}'.format(self.start.value, self.end.value)
+        # {0}:{1} => {0} <= x <= {1}
+        assert self.start.polarity and self.end.polarity
+        return "{0}:{1}".format(self.start.value, self.end.value)
 
 
 _VlistType = Optional[
@@ -975,9 +1298,31 @@ class VersionList(VersionPredicate['VersionList']):
     versions = None  # type: List[Union[Version, VersionRange]]
 
     @classmethod
-    def parse(cls, s):
+    def from_version_or_range(cls, version_or_range):
+        # type: (Union[Version, VersionRange]) -> VersionList
+        return cls([version_or_range])
+
+    @classmethod
+    def empty(cls):
+        # type: () -> VersionList
+        return cls(vlist=None)
+
+    @classmethod
+    def parse(cls, string):
         # type: (str) -> VersionList
-        return cls(s)
+
+        def parse_version_or_range(el):
+            # type: (str) -> Union[Version, VersionRange]
+            if ':' in el:
+                return VersionRange.parse(el)
+            return Version.parse(el)
+        if ',' in string:
+            elements = string.split(',')
+            versions_or_ranges = [parse_version_or_range(el) for el in elements]
+            return cls(versions_or_ranges)
+        if string:
+            return cls.from_version_or_range(parse_version_or_range(string))
+        return cls.empty()
 
     def __init__(self, vlist=None):
         # type: (_VlistType) -> None
@@ -1269,16 +1614,10 @@ def _string_to_version(string):
     string = string.replace(' ', '')
 
     if ',' in string:
-        return VersionList(string.split(','))
-
+        return VersionList.parse(string)
     elif ':' in string:
-        s, e = string.split(':')
-        start = Version(s) if s else None
-        end = Version(e) if e else None
-        return VersionRange(start, end)
-
-    else:
-        return Version(string)
+        return VersionRange.parse(string)
+    return Version.parse(string)
 
 
 def ver(obj):
