@@ -24,6 +24,7 @@ be called on any of the types::
   intersection
   concrete
 """
+import math
 import numbers
 import os
 import re
@@ -33,11 +34,14 @@ from functools import wraps
 
 from typing import (  # novm
     Any,
+    ClassVar,
     Dict,
+    FrozenSet,
     Generic,
     Iterable,
     Iterator,
     List,
+    Literal,
     Optional,
     Tuple,
     Type,
@@ -104,14 +108,14 @@ def coerce_versions(a, b):
         return (a, b)
     elif order.index(ta) > order.index(tb):
         if ta == VersionRange:
-            return (a, VersionRange(b, b))
+            return (a, VersionRange.from_single_version(b))
         else:
-            return (a, VersionList([b]))
+            return (a, VersionList.from_version_or_range(b))
     else:
         if tb == VersionRange:
-            return (VersionRange(a, a), b)
+            return (VersionRange.from_single_version(a), b)
         else:
-            return (VersionList([a]), b)
+            return (VersionList.from_version_or_range(a), b)
 
 
 def coerced(method):
@@ -208,7 +212,7 @@ class VersionPredicate(Generic[V]):
     @classmethod
     @_abstract_method
     def parse(cls, string):
-        # type: (str) -> VersionPredicate
+        # type: (str) -> V
         pass
 
     @_abstract_method
@@ -326,6 +330,16 @@ class Version(VersionPredicate['Version']):
 
         self.is_commit = len(self.string) == 40 and COMMIT_VERSION.match(self.string)
 
+        # We can be sure this assertion will succeed because the string was checked
+        # against `VALID_VERSION` before getting here.
+        assert len(self.version) >= 1, self.version
+        self._string_version = (self.version[-1]
+                                if isinstance(self.version[-1], str)
+                                else None)  # type: Optional[str]
+        self._numeric_only_version = (self.version[:-1]  # type: ignore[assignment]
+                                      if self._string_version is not None
+                                      else self.version[:])  # type: Tuple[int, ...]
+
     def _cmp(self, other_lookups=None):
         commit_lookup = self.commit_lookup or other_lookups
 
@@ -433,13 +447,43 @@ class Version(VersionPredicate['Version']):
         """
         return self[:index]
 
+    def _extend_version_for_numerical_extreme(self, extreme_value):
+        # type: (Union[int, float]) -> Version
+        # If the final numerical component is exactly the "extreme value" we are trying
+        # to place at the end, then return. This operation is idempotent.
+        if (self._numeric_only_version and
+            self._numeric_only_version[-1] == extreme_value):
+            return self
+        # Otherwise, add the "extreme value" as the final component. This may end up
+        # being the first component as well if the version has no numerical components.
+        all_numeric_components = self._numeric_only_version + (extreme_value,)
+        if self._string_version is not None:
+            assert len(self.separators) >= 3, self.separators
+            separator_to_copy = self.separators[-3]
+            all_new_components = all_numeric_components + (self._string_version,)
+            all_new_separators = (
+                self.separators[:-2] + (separator_to_copy,) + self.separators[-2:])
+        elif self.separators == ('',):
+            return self
+        else:
+            assert len(self.separators) >= 2, self.separators
+            separator_to_copy = self.separators[-2]
+            all_new_components = all_numeric_components
+            all_new_separators = (
+                self.separators[:-1] + (separator_to_copy,) + self.separators[-1:])
+        generated_version_string = ''
+        for component, separator in zip(all_new_components, all_new_separators):
+            generated_version_string += str(component)
+            generated_version_string += str(separator)
+        return type(self).parse(generated_version_string)
+
     def lowest(self):
         # type: () -> Version
-        return self
+        return self._extend_version_for_numerical_extreme(0)
 
     def highest(self):
         # type: () -> Version
-        return self
+        return self._extend_version_for_numerical_extreme(math.inf)
 
     def isdevelop(self):
         # type: () -> bool
@@ -574,6 +618,7 @@ class Version(VersionPredicate['Version']):
     @coerced
     def __gt__(self, other):
         # type: (Version) -> bool
+        # return other < self
         return not (self == other) and not (self < other)
 
     def __hash__(self):
@@ -801,7 +846,7 @@ class VersionRange(VersionPredicate['VersionRange']):
 
         Note further that overlaps() is a symmetric operation, while
         satisfies() is not.
-        
+
         ?
 
         x.satisfies(y) in general means that x and y have a
