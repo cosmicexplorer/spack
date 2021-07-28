@@ -47,6 +47,7 @@ from typing import (  # novm
     Type,
     TypeVar,
     Union,
+    cast,
 )
 from typing_extensions import Literal, overload  # novm
 
@@ -300,6 +301,9 @@ class Version(VersionPredicate['Version']):
         "commit_lookup",
         "is_commit",
         "commit_version",
+        "_numeric_only_version",
+        "_string_version",
+        "_extreme_backref",
     ]
 
     @classmethod
@@ -339,6 +343,8 @@ class Version(VersionPredicate['Version']):
         self._numeric_only_version = (self.version[:-1]  # type: ignore[assignment]
                                       if self._string_version is not None
                                       else self.version[:])  # type: Tuple[int, ...]
+
+        self._extreme_backref = None  # type: Optional[Version]
 
     def _cmp(self, other_lookups=None):
         commit_lookup = self.commit_lookup or other_lookups
@@ -450,7 +456,7 @@ class Version(VersionPredicate['Version']):
     def _extend_version_for_numerical_extreme(self, extreme_value):
         # type: (Union[int, float]) -> Version
         # If the final numerical component is exactly the "extreme value" we are trying
-        # to place at the end, then return. This operation is idempotent.
+        # to place at the end, then return. Therefore, this operation is idempotent.
         if (self._numeric_only_version and
             self._numeric_only_version[-1] == extreme_value):
             return self
@@ -471,11 +477,15 @@ class Version(VersionPredicate['Version']):
             all_new_components = all_numeric_components
             all_new_separators = (
                 self.separators[:-1] + (separator_to_copy,) + self.separators[-1:])
+        # Generate a new version string, then parse it.
         generated_version_string = ''
         for component, separator in zip(all_new_components, all_new_separators):
             generated_version_string += str(component)
             generated_version_string += str(separator)
-        return type(self).parse(generated_version_string)
+        new_version = type(self).parse(generated_version_string)
+        # Leave breadcrumbs for self.strip_version_extension_suffix() to follow.
+        new_version._extreme_backref = self
+        return new_version
 
     def lowest(self):
         # type: () -> Version
@@ -484,6 +494,12 @@ class Version(VersionPredicate['Version']):
     def highest(self):
         # type: () -> Version
         return self._extend_version_for_numerical_extreme(math.inf)
+
+    def strip_version_extension_suffix(self):
+        # type: () -> Version
+        if self._extreme_backref is not None:
+            return self._extreme_backref
+        return self
 
     def isdevelop(self):
         # type: () -> bool
@@ -791,34 +807,38 @@ class VersionEndpoint(Generic[_EndpointLocation]):
 
     def __contains__(self, other):
         # type: (VersionEndpoint) -> bool
-        # return not (other < self or other > self)
         if self.is_wildcard:
-            return True
+            return self.polarity
         if other.is_wildcard:
-            return False
+            return not self.polarity
+        assert (self.value is not None) and (other.value is not None), (self, other)
         polarities_match = self.polarity == other.polarity
         if self.location == 'right':
             if other.location == 'left':
-                return other.value < self.value or other.value in self.value
+                if other.value in self.value:
+                    return polarities_match
             if other.value in self.value:
                 return polarities_match
-            return other.value < self.value
+            return False
         assert self.location == 'left', self
         if other.location == 'right':
-            return other.value > self.value or other.value in self.value
+            if other.value in self.value:
+                return polarities_match
         if other.value in self.value:
             return polarities_match
-        return other.value > self.value
+        return False
 
     def satisfies(self, other):
         # type: (VersionEndpoint) -> bool
-        return self in other
+        polarities_match = self.polarity == other.polarity
+        return (self in other) and polarities_match
 
     def lowest(self):
         # type: () -> Optional[Version]
         if self.location == 'left':
             if self.is_wildcard:
                 return None
+            assert self.value is not None
             return self.value.lowest()
         return None
 
@@ -827,6 +847,7 @@ class VersionEndpoint(Generic[_EndpointLocation]):
         if self.location == 'right':
             if self.is_wildcard:
                 return None
+            assert self.value is not None
             return self.value.highest()
         return None
 
@@ -842,37 +863,33 @@ class VersionEndpoint(Generic[_EndpointLocation]):
     @_endpoint_only
     def __lt__(self, other):
         # type: (VersionEndpoint) -> bool
-        # assert not (
-        #     self.location == 'right' or other.location == 'right'), (self, other)
-        # assert self.location == other.location, (self, other)
         if self.is_wildcard:
-            return True
+            return self.polarity
         if other.is_wildcard:
-            return False
+            return not other.polarity
         if self.location == other.location:
             if self.value == other.value:
                 if self.polarity and not other.polarity:
                     return False if self.location == 'right' else True
                 if other.polarity and not self.polarity:
                     return True if self.location == 'right' else False
+        assert (self.value is not None) and (other.value is not None), (self, other)
         return self.value < other.value
 
     @_endpoint_only
     def __gt__(self, other):
         # type: (VersionEndpoint) -> bool
-        # assert not (
-        #     self.location == 'left' or other.location == 'left'), (self, other)
-        # assert self.location == other.location, (self, other)
         if self.is_wildcard:
-            return True
+            return self.polarity
         if other.is_wildcard:
-            return False
+            return not other.polarity
         if self.location == other.location:
             if self.value == other.value:
                 if self.polarity and not other.polarity:
                     return False if self.location == 'left' else True
                 if other.polarity and not self.polarity:
                     return True if self.location == 'left' else False
+        assert (self.value is not None) and (other.value is not None), (self, other)
         return self.value > other.value
 
     def __ne__(self, other):
@@ -893,8 +910,8 @@ class VersionEndpoint(Generic[_EndpointLocation]):
 
 
 class VersionRange(VersionPredicate['VersionRange']):
-    start = None  # type: Optional[Version]
-    end = None    # type: Optional[Version]
+    start = None  # type: VersionEndpoint
+    end = None    # type: VersionEndpoint
 
     @classmethod
     def from_single_version(cls, version):
@@ -1048,18 +1065,6 @@ class VersionRange(VersionPredicate['VersionRange']):
     @coerced
     def __gt__(self, other):
         # type: (VersionRange) -> bool
-        # if other is None:
-        #     return False
-
-        # if self in other:
-        #     return False
-
-        # s, o = self, other
-        # if s.start > o.start:
-        #     return True
-        # if s.start < o.start:
-        #     return False
-        # return s.end > o.end
         return not (self == other) and not (self < other)
 
     @property
@@ -1077,8 +1082,6 @@ class VersionRange(VersionPredicate['VersionRange']):
         if other is None:
             return False
 
-        # in_lower = (other.start in self.start and
-        #             other.end in self.start)
         in_lower = ((self.start == other.start) or
                     self.start.is_wildcard or
                     ((not other.start.is_wildcard) and (
@@ -1087,8 +1090,6 @@ class VersionRange(VersionPredicate['VersionRange']):
         if not in_lower:
             return False
 
-        # in_upper = (other.start in self.end and
-        #             other.end in self.end)
         in_upper = ((self.end == other.end) or
                     self.end.is_wildcard or
                     ((not other.end.is_wildcard) and (
@@ -1141,32 +1142,37 @@ class VersionRange(VersionPredicate['VersionRange']):
         - 1:2 does not satisfy 3:4, as their intersection is empty.
         - 4.5:4.7 satisfies 4.7.2:4.8, as their intersection is 4.7.2:4.7
         """
-        # return self in other
         return (self.overlaps(other) or
                 # if either self.start or other.end are a wildcard, then this can't
                 # satisfy, or overlaps() would've taken care of it.
-                not self.start.is_wildcard and
-                not other.end.is_wildcard and
-                self.start.satisfies(other.end))
+                ((not self.start.is_wildcard) and
+                 (not other.end.is_wildcard) and
+                 self.start.satisfies(other.end)))
 
     @coerced
     def overlaps(self, other):
         # type: (VersionRange) -> bool
-        return ((self.start <= other.end or
-                 other.end in self.start or self.start in other.end) and
-                (other.start <= self.end or
-                 other.start in self.end or self.end in other.start))
+        return (((self.start.is_wildcard and self.start.polarity) or
+                 (other.end.is_wildcard and other.end.polarity) or
+                 self.start <= other.end or
+                 other.end in self.start or
+                 self.start in other.end) and
+                ((other.start.is_wildcard and other.start.polarity) or
+                 (self.end.is_wildcard and self.end.polarity) or
+                 other.start <= self.end or
+                 other.start in self.end or
+                 self.end in other.start))
 
     @coerced
     def union(self, other):
         # type: (VersionRange) -> VersionPredicate
         if not self.overlaps(other):
-            if (self.end.value is not None and other.start.value is not None and
-                self.end.value.is_predecessor(other.start.value)):
+            if ((not self.end.is_wildcard) and (not other.start.is_wildcard) and
+                self.end.value.is_predecessor(other.start.value)):  # type: ignore[union-attr, arg-type] # noqa
                 return VersionRange(self.start, other.end)
 
-            if (other.end.value is not None and self.start.value is not None and
-                other.end.value.is_predecessor(self.start.value)):
+            if ((not other.end.is_wildcard) and (not self.start.is_wildcard) and
+                other.end.value.is_predecessor(self.start.value)):  # type: ignore[union-attr, arg-type] # noqa
                 return VersionRange(other.start, self.end)
 
             return VersionList([self, other])
@@ -1219,11 +1225,11 @@ class VersionRange(VersionPredicate['VersionRange']):
                         end = other.end
 
             if start in end and not start < end:
-                assert start.value is not None
-                return start.value
+                assert not start.is_wildcard
+                return cast(Version, start.value)
             if end in start and not end > start:
-                assert end.value is not None
-                return end.value
+                assert not end.is_wildcard
+                return cast(Version, end.value)
 
             return VersionRange(start, end)
 

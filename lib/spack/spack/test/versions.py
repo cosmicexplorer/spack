@@ -583,7 +583,7 @@ def test_list_highest():
     vl = VersionList(['master', '1.2.3', 'develop', '3.4.5', 'foobar'])
     assert vl.highest() == Version('develop')
     assert vl.lowest() == Version('foobar')
-    assert vl.highest_numeric() == Version('3.4.5')
+    assert vl.highest_numeric().strip_version_extension_suffix() == Version('3.4.5')
 
     vl2 = VersionList(['master', 'develop'])
     assert vl2.highest_numeric() is None
