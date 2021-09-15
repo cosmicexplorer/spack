@@ -59,6 +59,7 @@ class PyProtobuf(PythonPackage):
     depends_on('py-six@1.9:', when='@3:', type=('build', 'run'))
     depends_on('py-ordereddict', when='@3: ^python@:2', type=('build', 'run'))
     depends_on('py-unittest2', when='@3: ^python@:2', type=('build', 'run'))
+    # TODO: how to ensure version of protobuf is pinned at the same version as py-protobuf?
     depends_on('protobuf', when='+cpp')
 
     @property
