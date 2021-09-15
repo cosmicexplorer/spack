@@ -24,6 +24,8 @@ class Npm(Package):
     version('3.10.9', sha256='fb0871b1aebf4b74717a72289fade356aedca83ee54e7386e38cb51874501dd6')
     version('3.10.5', sha256='ff019769e186152098841c1fa6325e5a79f7903a45f13bd0046a4dc8e63f845f')
 
+    extendable = True
+
     depends_on('node-js', type=('build', 'run'))
 
     # npm 6.13.4 ships with node-gyp 5.0.5, which contains several Python 3

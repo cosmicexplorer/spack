@@ -20,7 +20,7 @@ class PyFawkes(PythonPackage):
     version('1.0.4', sha256='a2e899806b6e7913b3adca47e76e32728748de41524a18086b02782e248cc62f')
 
     variant('cuda', default=False,
-            description='Enables GPU computation on CUDA platforms using TensorFlow.')
+            description='Enable GPU computation on CUDA platforms using TensorFlow.')
 
     depends_on('python@3.5:', type=('build', 'run'))
     depends_on('py-setuptools', type='build')

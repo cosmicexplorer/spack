@@ -21,7 +21,7 @@ class PyMtcnn(PythonPackage):
     version('0.1.1', sha256='d0957274584be62cb83d4a089041f8ee3cf3b1893e45f01ed3356f94a381302b')
 
     variant('cuda', default=False,
-            description='Enables GPU computation on CUDA platforms with openCV.')
+            description='Enable GPU computation on CUDA platforms with openCV.')
 
     depends_on('python@3.4:', type=('build', 'run'))
     depends_on('py-setuptools', type='build')

@@ -18,5 +18,7 @@ class Yarn(Package):
     version('1.22.0', sha256='de8871c4e2822cba80d58c2e72366fb78567ec56e873493c9ca0cca76c60f9a5')
     version('1.21.1', sha256='d1d9f4a0f16f5ed484e814afeb98f39b82d4728c6c8beaafb5abc99c02db6674')
 
+    extendable = True
+
     def install(self, spec, prefix):
         install_tree('.', prefix)
