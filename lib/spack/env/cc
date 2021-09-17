@@ -61,14 +61,14 @@ SPACK_SYSTEM_DIRS"
 
 # Print a message to stderr and exit with status 1.
 die() {
-    echo "$@" >&2
+    echo "ERROR: $1" >&2
     exit 1
 }
 
 check_IFS() {
-    readonly should_be="$1"
-    if [ "$IFS" != "$should_be" ]; then
-        die "\$IFS must be '$should_be', but was '$IFS'."
+    readonly must_be="$1"
+    if [ "$IFS" != "$must_be" ]; then
+        die "\$IFS must be '$must_be', but was '$IFS'."
     fi
 }
 
@@ -124,8 +124,8 @@ posix_readlink() (
             # the symlink's own directory.
             # Note: Parsing `ls -l` output is the only POSIX-compliant way to
             #       find the symlink target.
-            target=$(command ls -l "$fname")
-            target=${target#* -> }
+            target="$(command ls -l "$fname")"
+            target="${target#* -> }"
             # Resolve the next symlink target.
             continue
         fi
@@ -133,22 +133,35 @@ posix_readlink() (
         break
     done
     # Get the canonical directory path.
-    readonly targetDir="$(command pwd -P)"
+    readonly target_dir="$(command pwd -P)"
     # Output the ultimate target's canonical path.
     # Note that we manually resolve paths ending in /. and /.. to make sure we
     # have a normalized path.
     if [ "$fname" = '.' ]; then
-        command printf "%s${output_separator}" "${targetDir%/}"
+        command printf "%s${output_separator}" "${target_dir%/}"
     elif  [ "$fname" = '..' ]; then
         # Caveat: something like /var/.. will resolve to /private (assuming
         # /var@ -> /private/var), i.e. the '..' is applied
         # AFTER canonicalization.
         command printf \
-                "%s${output_separator}" "$(command dirname -- "${targetDir}")"
+                "%s${output_separator}" "$(command dirname -- "${target_dir}")"
     else
-        command printf "%s${output_separator}" "${targetDir%/}/$fname"
+        command printf "%s${output_separator}" "${target_dir%/}/$fname"
     fi
 )
+
+# Execute `awk` with the locale set to reliably process pathnames.
+pawk() {
+    # Quoted from an informative section of
+    # https://pubs.opengroup.org/onlinepubs/9699919799/utilities/awk.html:
+    # > When using awk to process pathnames, it is recommended that LC_ALL, or
+    #   at least LC_CTYPE and LC_COLLATE, are set to POSIX or C in the
+    #   environment, since pathnames can contain byte sequences that do not form
+    #   valid characters in some locales, in which case the utility's behavior
+    #   would be undefined. In the POSIX locale each byte is a valid single-byte
+    #   character, and therefore this problem is avoided.
+    LC_ALL=C awk "$@"
+}
 
 # Perform several types of path normalization on the first argument, which is
 # then split by $IFS (which must be set to the value ':'):
@@ -161,35 +174,77 @@ canonicalize_paths() {
     # $1 is split according to $IFS, which is expected to be ':'.
     check_IFS ':'
     for dir in $1; do
+        # Ignore empty directory paths.
+        if [ -z "$dir" ]; then
+            continue
+        fi
         # Remove trailing slashes and resolve symlinks.
         posix_readlink "$dir" '\0' 2>/dev/null
         # Remove repeated lines, without reordering the lines.
-    done | awk 'BEGIN { RS = "\0"; ORS = ":" }; !seen[$0]++'
+    done | pawk 'BEGIN { RS = "\0"; ORS = ":" }; !seen[$0]++'
 }
 
-# Read input parameters into ???.
-# SPACK_SYSTEM_DIRS is delimited by :
-readonly SPACK_SYSTEM_DIRS="$(IFS=':' canonicalize_paths "$SPACK_SYSTEM_DIRS")"
+# Test whether $2 is a prefix of $1.
+#
+# Note: Caution must be used when employing this with filesystem paths. It is
+#       almost always necessary to call posix_readlink() on both arguments
+#       beforehand, unless that is not possible because one or both may
+#       not exist. Even in that case, care should be taken to ensure:
+#       - both are absolute paths, or relative to the same directory,
+#       - any doubled slashes in directory components are removed,
+#       - any trailing slashes are removed, in the case of directory paths.
+is_prefix_of() {
+    readonly superstring="$1"
+    readonly potential_prefix="$2"
+    if [ -z "$potential_prefix" ]; then
+        die "Possible prefix string of superstring '$superstring' was blank!"
+    fi
+    [ "${superstring#$potential_prefix}" != "$superstring" ]
+}
 
-# # SPACK_<LANG>FLAGS and SPACK_LDLIBS are split by ' '
-# IFS=' ' read -ra SPACK_FFLAGS   <<< "$SPACK_FFLAGS"
-# IFS=' ' read -ra SPACK_CPPFLAGS <<< "$SPACK_CPPFLAGS"
-# IFS=' ' read -ra SPACK_CFLAGS   <<< "$SPACK_CFLAGS"
-# IFS=' ' read -ra SPACK_CXXFLAGS <<< "$SPACK_CXXFLAGS"
-# IFS=' ' read -ra SPACK_LDFLAGS  <<< "$SPACK_LDFLAGS"
-# IFS=' ' read -ra SPACK_LDLIBS   <<< "$SPACK_LDLIBS"
+# Test whether a path $1 is equal to any entry of $2, after canonicalization.
+path_contained_in_nonrecursive() {
+    readonly path_to_check="$(posix_readlink "$1")"
+    # $2/$directory_list are split according to $IFS, which may be arbitrary but
+    # is likely ':'.
+    readonly directory_list="$2"
+    for dir_to_test in $directory_list; do
+        # Note: This string comparison works because we have canonicalized
+        #       $path_to_check, but we *ASSUME* $directory_list was previously
+        #       canonicalized by a call to canonicalize_paths().
+        if [ "$path_to_check" -ef "$dir_to_test" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
-# Test whether a path $1 is recursively contained in any entry of $2.
+# Remove entries of $1 which are contained in $2.
+filter_out_paths_from_another_set_of_paths() {
+    readonly candidate_paths="$1"
+    readonly paths_to_avoid="$2"
+    # We output paths using the ':' separator, so we want to assume the same for
+    # our input arguments to make it easier to follow.
+    check_IFS ':'
+    for candidate in $candidate_paths; do
+        if ! path_contained_in_nonrecursive "$candidate" "$paths_to_avoid"; then
+            printf '%s:' "$candidate"
+        fi
+    done
+}
+
+# Test whether a path $1 is recursively contained in any entry of $2,
+# after canonicalization.
 path_contained_in_recursively() {
     readonly path_to_check="$(posix_readlink "$1")"
     # $2/$directory_list are split according to $IFS, which may be arbitrary but
     # is likely ':'.
     readonly directory_list="$2"
     for dir_to_test in $directory_list; do
-        # Remove the smallest prefix of $dir_to_test matching the pattern
-        # *$path_to_check and check if the resulting string is changed, which is
-        # equivalent to testing substring containment.
-        if [ "${dir_to_test#*$path_to_check}" != "$dir_to_test" ]; then
+        # Note: This string comparison works because we have canonicalized
+        #       $path_to_check, but we *ASSUME* $directory_list was previously
+        #       canonicalized by a call to canonicalize_paths().
+        if is_prefix_of "$path_to_check" "$dir_to_test"; then
             return 0
         fi
     done
@@ -202,33 +257,45 @@ is_system_dir() {
     IFS=':' path_contained_in_recursively "$path" "$SPACK_SYSTEM_DIRS"
 }
 
-# Exit with error if the parameter given by the name in $1 is unset or empty.
-check_param_set() {
-    readonly param_name="$1"
-    eval ">/dev/null echo \${${param_name}:?Spack compiler must be run from Spack! Input '$param_name' is missing.}"
+# Ignore the arguments, do nothing, and return successfully.
+_() {
+    return 0
 }
+
+# Exit with error if the parameter given by the name in $1 is unset or empty.
+check_param_is_set() {
+    readonly param_name="$1"
+    eval "_ \${${param_name}:?Spack compiler must be run from Spack! Input '$param_name' is missing.}"
+}
+
+## Read input parameters into ???.
+# SPACK_SYSTEM_DIRS is delimited by :
+readonly SPACK_SYSTEM_DIRS="$(IFS=':' canonicalize_paths "$SPACK_SYSTEM_DIRS")"
+
+# # SPACK_<LANG>FLAGS and SPACK_LDLIBS are split by ' '
+# IFS=' ' read -ra SPACK_FFLAGS   <<< "$SPACK_FFLAGS"
+# IFS=' ' read -ra SPACK_CPPFLAGS <<< "$SPACK_CPPFLAGS"
+# IFS=' ' read -ra SPACK_CFLAGS   <<< "$SPACK_CFLAGS"
+# IFS=' ' read -ra SPACK_CXXFLAGS <<< "$SPACK_CXXFLAGS"
+# IFS=' ' read -ra SPACK_LDFLAGS  <<< "$SPACK_LDFLAGS"
+# IFS=' ' read -ra SPACK_LDLIBS   <<< "$SPACK_LDLIBS"
 
 ## Ensure all required parameters are set.
 for param in $parameters; do
-    check_param_set "$param"
+    check_param_is_set "$param"
 done
 
 ## Check if optional parameters are defined.
 
 # Define true/false/custom variables we can use in parameter expansions.
-True='true'
-False='false'
-Custom='custom'
+readonly True='true'
+readonly False='false'
+readonly Custom='custom'
 
 # Determine whether $1 is equal to $True, $False, or $Custom.
 is_valid_tribool() {
     readonly value="$1"
     [ "$value" = "$True" -o "$value" = "$False" -o "$value" = "$Custom" ]
-}
-
-# Ignore the arguments, do nothing, and return successfully.
-_() {
-    return 0
 }
 
 # If we aren't asking for debug flags, don't add them.
@@ -290,11 +357,13 @@ case "$command" in
         mode='ld'
         ;;
     *)
-        die "Unknown compiler: $command"
+        # Check that at least one of the known commands was actually selected,
+        # otherwise we don't know what to execute.
+        die "Unknown command '$command' selected. Compiler was: $SPACK_COMPILER_SPEC."
         ;;
 esac
-# If not set explicitly above, the value of $CC is set to the string 'CC'.
-_ ${CC:='CC'}
+# If not set explicitly above, the value of $comp is set to the string 'CC'.
+_ ${comp:='CC'}
 
 # If any of the arguments below are present, then the mode is vcheck.
 # In vcheck mode, nothing is added in terms of extra search paths or
@@ -348,73 +417,53 @@ fi
 #
 # https://sourceware.org/ml/binutils/2013-01/msg00307.html
 #
-dtags_to_add="${SPACK_DTAGS_TO_ADD}"
-dtags_to_strip="${SPACK_DTAGS_TO_STRIP}"
-linker_arg="${SPACK_LINKER_ARG}"
+readonly dtags_to_add="${SPACK_DTAGS_TO_ADD}"
+readonly dtags_to_strip="${SPACK_DTAGS_TO_STRIP}"
+readonly linker_arg="${SPACK_LINKER_ARG}"
 
 # Set up rpath variable according to language.
-eval rpath=\$SPACK_${comp}_RPATH_ARG
+eval "readonly rpath=\$SPACK_${comp}_RPATH_ARG"
 
 # Dump the mode and exit if the command is dump-mode.
-if [ "$SPACK_TEST_COMMAND" = dump-mode ]; then
+if [ "$SPACK_TEST_COMMAND" = 'dump-mode' ]; then
     echo "$mode"
     exit
 fi
 
-# Check that at least one of the real commands was actually selected,
-# otherwise we don't know what to execute.
-if [ -z "$command" ]; then
-    die "ERROR: Compiler '$SPACK_COMPILER_SPEC' does not support compiling $language programs."
-fi
+# Filter '.' and Spack environment directories out of $PATH so that this script
+# doesn't just call itself.
+readonly env_path="$(IFS=':' canonicalize_paths "$PATH")"
+readonly spack_env_path="$(IFS=':' canonicalize_paths "$SPACK_ENV_PATH")"
+readonly filtered_path="$(IFS=':' filter_out_paths_from_another_set_of_paths "$env_path" "$spack_env_path")"
+# Remove the trailing ':' before putting it back in $PATH.
+PATH="${filtered_path%:}"
 
-#
-# Filter '.' and Spack environment directories out of PATH so that
-# this script doesn't just call itself
-#
-IFS=':' read -ra env_path <<< "$PATH"
-IFS=':' read -ra spack_env_dirs <<< "$SPACK_ENV_PATH"
-spack_env_dirs+=("" ".")
-export PATH=""
-for dir in "${env_path[@]}"; do
-    addpath=true
-    for env_dir in "${spack_env_dirs[@]}"; do
-        # if [[ "${dir%%/}" == "$env_dir" ]]; then
-        if [ "$dir" = "$env_dir" ]; then
-            addpath=false
-            break
-        fi
-    done
-    if $addpath; then
-        export PATH="${PATH:+$PATH:}$dir"
-    fi
-done
-
-if [ "$mode" = vcheck ]; then
-    exec "${command}" "$@"
+if [ "$mode" = 'vcheck' ]; then
+    exec "$command" "$@"
 fi
 
 # Darwin's linker has a -r argument that merges object files together.
-# It doesn't work with -rpath.
-# This variable controls whether they are added.
-add_rpaths=true
-if [ "$mode" = ld ] || [ "$mode" = ccld ];
-then
-    case "$SPACK_SHORT_SPEC" in
-        *darwin*)
-            for arg in "$@"; do
-                if { [ "$arg" = -r ] && [ "$mode" = ld ];   } ||
-                { [ "$arg" = -r ] && [ "$mode" = ccld ]; } ||
-                { [ "$arg" = -Wl,-r ] && [ "$mode" = ccld ]; }; then
-                    add_rpaths=false
-                    break
-                fi
-            done
-            ;;
-    esac
-fi
+# It doesn't work with -rpath, so $add_rpaths controls whether they are added.
+case "$mode" in
+    ld|ccld)
+        case "$SPACK_SHORT_SPEC" in
+            *darwin*)
+                for arg; do
+                    case "${arg}~${mode}" in
+                        -r~ld|-r~ccld|-Wl,-r~ccld)
+                            add_rpaths=$False
+                            break
+                            ;;
+                    esac
+                done
+                ;;
+        esac
+        ;;
+esac
+_ ${add_rpaths:=$True}
 
 # Save original command for debug logging
-input_command="$*"
+readonly input_command="$*"
 
 #
 # Parse the command line arguments.
@@ -445,17 +494,17 @@ other_args=()
 isystem_system_includes=()
 isystem_includes=()
 
-while [ $# -ne 0 ]; do
-
-    # an RPATH to be added after the case statement.
-    rp=""
-
-    # Multiple consecutive spaces in the command line can
-    # result in blank arguments
+while [ "$#" -ne 0 ]; do
+    # Multiple consecutive spaces in the command line can result in blank
+    # arguments, so we remove those. We assume blank arguments are meaningless
+    # to any tool we would invoke.
     if [ -z "$1" ]; then
         shift
         continue
     fi
+
+    # An $RPATH entry to be added after the `case` statement.
+    rp=""
 
     case "$1" in
         -isystem*)
