@@ -67,13 +67,13 @@ die() {
 }
 
 check_IFS() {
-    readonly must_be="$1"
+    must_be="$1"
     if [ "$IFS" != "$must_be" ]; then
         die "\$IFS must be '$must_be', but was '$IFS'."
     fi
 }
 
-# Execute `awk` with the locale set to reliably process pathnames.
+# Execute awk with the locale set to reliably process pathnames.
 path_safe_awk() {
     # Quoted from an informative section of
     # https://pubs.opengroup.org/onlinepubs/9699919799/utilities/awk.html:
@@ -102,15 +102,15 @@ canonicalize_paths() {
         # Remove any trailing slash.
         printf '%s:' "${dir%/}"
         # Remove repeated entries, without reordering the entries.
-    done | path_safe_awk 'BEGIN { RS = ":"; ORS = ":" }; !seen[$0]++'
+    done | path_safe_awk 'BEGIN { RS = ":"; ORS = ":" }; $0 && !seen[$0]++'
 }
 
 # Test whether a path $1 is equal to any entry of $2.
 path_contained_in_nonrecursive() {
-    readonly path_to_check="$1"
+    path_to_check="$1"
     # $2/$directory_list are split according to $IFS, which may be arbitrary but
     # is likely ':'.
-    readonly directory_list="$2"
+    directory_list="$2"
     for dir_to_test in $directory_list; do
         # We strip any trailing slashes from either argument.
         if [ "${path_to_check%/}" -ef "${dir_to_test%/}" ]; then
@@ -122,8 +122,8 @@ path_contained_in_nonrecursive() {
 
 # Remove entries of $1 which are contained in $2.
 filter_out_paths_from_another_set_of_paths() {
-    readonly candidate_paths="$1"
-    readonly paths_to_avoid="$2"
+    candidate_paths="$1"
+    paths_to_avoid="$2"
     # We output paths using the ':' separator, so we want to assume the same for
     # our input arguments to make it easier to follow.
     check_IFS ':'
@@ -141,7 +141,7 @@ _() {
 
 # Exit with error if the parameter given by the name in $1 is unset or empty.
 check_param_is_set() {
-    readonly param_name="$1"
+    param_name="$1"
     eval "_ \${${param_name}:?Spack compiler must be run from Spack! Input '$param_name' is missing.}"
 }
 
@@ -275,6 +275,7 @@ fi
 # Set up rpath variable according to language.
 eval "readonly rpath=\$SPACK_${comp}_RPATH_ARG"
 
+_ ${SPACK_TEST_COMMAND:=''}
 # Dump the mode and exit if the command is dump-mode.
 if [ "$SPACK_TEST_COMMAND" = 'dump-mode' ]; then
     echo "$mode"
@@ -316,14 +317,13 @@ _ ${add_rpaths:=$True}
 # Save original command for debug logging
 readonly input_command="$*"
 
-produce_awk_args_script() {
-    cat << EOF
+readonly awk_args_script='
 BEGIN {
     # Split SPACK_SYSTEM_DIRS into an array of directory paths.
     gsub(/^:|:$/, "", ENVIRON["SPACK_SYSTEM_DIRS"])
     split(ENVIRON["SPACK_SYSTEM_DIRS"], spack_system_dirs, ":")
     # Remove any trailing slashes.
-    for (system_dir in spack_system_dirs) sub(/\/$, "", system_dir)
+    for (system_dir in spack_system_dirs) sub(/\/$/, "", system_dir)
     # Track whether any -isystem arguments were provided.
     isystem_was_used = 0
     # Allow filtering out specific arguments from the parent script.
@@ -337,7 +337,7 @@ END {
     spack_mode = assert_nonempty(ENVIRON["SPACK_mode"], "$SPACK_mode")
     spack_lang_flags = assert_nonempty(ENVIRON["SPACK_lang_flags"], "$SPACK_lang_flags")
     spack_add_debug_flags = assert_nonempty(ENVIRON["SPACK_ADD_DEBUG_FLAGS"], "$SPACK_ADD_DEBUG_FLAGS")
-    # SPACK_<LANG>FLAGS and SPACK_LDLIBS are split by ' '
+    # SPACK_<LANG>FLAGS and SPACK_LDLIBS are split by " "
     split(ENVIRON["SPACK_FFLAGS"], spack_fflags, " ")
     split(ENVIRON["SPACK_CPPFLAGS"], spack_cppflags, " ")
     split(ENVIRON["SPACK_CFLAGS"], spack_cflags, " ")
@@ -356,7 +356,7 @@ END {
 }
 
 function is_system_dir(dir) {
-    sub(/\/$, "", dir)
+    sub(/\/$/, "", dir)
     for (system_dir in spack_system_dirs) {
         if (dir == spack_system_dirs[system_dir]) {
            return 1
@@ -373,6 +373,11 @@ function array_length(array) {
 
 function append(array, element) {
     array[array_length(array) + 1] = element
+}
+
+function append2(array, element1, element2) {
+    append(array, element1)
+    append(array, element2)
 }
 
 function concatenate(array_base, array_source) {
@@ -396,7 +401,7 @@ function die(msg) {
 
 function assert_nonempty(arg, description) {
     if (!arg) {
-        die("Argument '" description "' was expected to be a non-empty string!")
+        die("Argument \"" description "\" was expected to be a non-empty string!")
     }
     return arg
 }
@@ -404,9 +409,28 @@ function assert_nonempty(arg, description) {
 function is_filtered_arg(arg) {
     for (i in arg_filter) {
         # If arg_filter[i] occurs as a substring of arg, this succeeds.
-        if index(arg, arg_filter[i]) return 1
+        if (index(arg, arg_filter[i])) return 1
     }
     return 0
+}
+
+# The behavior of a for loop on an unitialized variable is undefined by POSIX,
+# so we can call split() on something that we know will produce an empty array
+# to avoid this ambiguity.
+function initialize_array(array) {
+    split("", array, "")
+}
+
+BEGIN {
+    initialize_array(isystem_system_includes)
+    initialize_array(isystem_includes)
+    initialize_array(system_includes)
+    initialize_array(includes)
+    initialize_array(system_libdirs)
+    initialize_array(libdirs)
+    initialize_array(other_args)
+    initialize_array(system_rpaths)
+    initialize_array(rpaths)
 }
 
 # Parse the command line arguments.
@@ -418,7 +442,7 @@ function is_filtered_arg(arg) {
 # are injected properly.
 #
 # All other arguments, including -l arguments, are treated as
-# 'other_args' and left in their original order.  This ensures that
+# other_args and left in their original order.  This ensures that
 # --start-group, --end-group, and other order-sensitive flags continue to
 # work as the caller expects.
 function option_processing_loop() {
@@ -461,7 +485,7 @@ function option_processing_loop() {
         }
         else append(other_args, "-Wl," $0)
     }
-    else if (sub(/^-Xlinker,/ "")) {
+    else if (sub(/^-Xlinker,/, "")) {
         if (!$0) getline
         if (sub(/^-?-rpath[=,]/, "")) add_rpath($0)
         else if (/^-?-rpath$/) {
@@ -486,8 +510,8 @@ function option_processing_loop() {
         }
         else {
             append(other_args, "-Xlinker")
-            # If we didn't get '-Xlinker -rpath' or
-            # '-Xlinker $SPACK_DTAGS_TO_STRIP', then re-run the option
+            # If we did not get "-Xlinker -rpath" or
+            # "-Xlinker $SPACK_DTAGS_TO_STRIP", then re-run the option
             # processing loop with the current value of $0.
             option_processing_loop()
         }
@@ -498,23 +522,56 @@ function option_processing_loop() {
     else append(other_args, $0)
 }
 
-function print_array_section(array) {
-    for (index in array) print array[index]
-    print "~~~~~SPACK~ARRAY~SECTION~END~~~~~"
-}
-
 # Execute the main option processing loop, at most once per input record. The
-# option processing loop will internally call `getline` if it needs to advance
+# option processing loop will internally call getline if it needs to advance
 # to the next argument before returning.
 { option_processing_loop() }
 
-# Add flags from Spack's cppflags, cflags, cxxflags, fcflags, fflags, and
+function is_cc_mode() {
+    return (spack_mode ~ /^(cc|ccld)$/)
+}
+
+function is_linker_mode() {
+    return (spack_mode ~ /^(ld|ccld)$/)
+}
+
+function uses_c_preprocessor() {
+    return (spack_mode ~ /^(cpp|as|cc|ccld)$/)
+}
+
+function is_fortran_lang() {
+    return (spack_lang_flags == "F")
+}
+
+function is_c_lang() {
+    return (spack_lang_flags == "C")
+}
+
+function is_cxx_lang() {
+    return (spack_lang_flags == "CXX")
+}
+
+function is_macos() {
+    return (spack_short_spec ~ /darwin/)
+}
+
+function should_add_rpaths() {
+    return (spack_add_rpaths != "false")
+}
+
+END {
+    initialize_array(flags)
+    initialize_array(args)
+    initialize_array(libs)
+}
+
+# Add flags from cppflags, cflags, cxxflags, fcflags, fflags, and
 # ldflags. We stick to the order that gmake puts the flags in by default.
 #
 # See the gmake manual on implicit rules for details:
 # https://www.gnu.org/software/make/manual/html_node/Implicit-Variables.html
 END {
-    if (spack_mode ~ /^(cc|ccld)$) {
+    if (is_cc_mode()) {
         concatenate(flags, spack_target_args)
     }
 
@@ -530,48 +587,46 @@ END {
     }
 
     # Fortran flags come before CPPFLAGS.
-    if (spack_mode ~ /^(cc|ccld)$/ && spack_lang_flags == "F") {
+    if (is_cc_mode() && is_fortran_lang()) {
         concatenate(flags, spack_fflags)
     }
 
     # C preprocessor flags come before any C/CXX flags.
-    if (spack_mode ~ /^(cpp|as|cc|ccld)$/) {
+    if (uses_c_preprocessor()) {
         concatenate(flags, spack_cppflags)
     }
 
     # Add C and C++ flags.
-    if (spack_mode ~ /^(cc|ccld)$/) {
-        if (spack_lang_flags == "C") concatenate(flags, spack_cflags)
-        else if (spack_lang_flags == "CXX") concatenate(flags, spack_cxxflags)
+    if (is_cc_mode()) {
+        if (is_c_lang()) concatenate(flags, spack_cflags)
+        else if (is_cxx_lang()) concatenate(flags, spack_cxxflags)
     }
 
     # Add linker flags.
-    if (spack_mode ~ /^(ld|ccld)$) {
+    if (is_linker_mode()) {
         concatenate(flags, spack_ldflags)
     }
 
     # On macOS insert headerpad_max_install_names linker flag.
-    if (spack_short_spec ~ /darwin/) {
+    if (is_macos()) {
         if (spack_mode == "ld") append(flags, "-headerpad_max_install_names")
         else if (spack_mode == "ccld") append(flags, "-Wl,-headerpad_max_install_names")
     }
 
-    # Append RPATH directories. Note that in the case of the
-    # top-level package these directories may not exist yet. For dependencies
-    # it is assumed that paths have already been confirmed.
-    if (spack_add_rpaths != "false" && spack_mode ~ /^(ccld|ld)$/) {
-        concatenate(rpaths, spack_rpath_dirs)
-    }
+    # Add RPATHs and lib directories if we are in any linking mode.
+    if (is_linker_mode()) {
+        # Append RPATH directories. Note that in the case of the top-level
+        # package these directories may not exist yet. For dependencies it is
+        # assumed that paths have already been confirmed.
+        if (should_add_rpaths()) {
+            concatenate(rpaths, spack_rpath_dirs)
+        }
 
-    if (spack_mode ~ /^(ccld|ld)$/) {
         concatenate(libdirs, spack_link_dirs)
-    }
 
-    # Add RPATHs if we're in in any linking mode.
-    if (spack_mode ~ /^(ccld|ld)$) {
         # Set extra RPATHs.
         concatenate(libdirs, spack_compiler_extra_rpaths)
-        if (spack_add_rpaths != "false") {
+        if (should_add_rpaths()) {
             concatenate(rpaths, spack_compiler_extra_rpaths)
             # Set implicit RPATHs.
             concatenate(rpaths, spack_compiler_implicit_rpaths)
@@ -595,17 +650,11 @@ END {
 
     # Insert include directories just prior to any system include directories.
     for (i in includes) append(args, "-I" includes[i])
-    for (i in isystem_includes) {
-        append(args, "-isystem")
-        append(args, isystem_includes[i])
-    }
+    for (i in isystem_includes) append2(args, "-isystem", isystem_includes[i])
 
-    if (spack_mode ~ /^(cpp|cc|as|ccld)$/) {
+    if (uses_c_preprocessor()) {
         if (isystem_was_used) {
-            for (i in spack_include_dirs) {
-                append(args, "-isystem")
-                append(args, spack_include_dirs[i])
-            }
+            for (i in spack_include_dirs) append2(args, "-isystem", spack_include_dirs[i])
         }
         else {
             for (i in spack_include_dirs) append(args, "-I" spack_include_dirs[i])
@@ -613,10 +662,7 @@ END {
     }
 
     for (i in system_includes) append(args, "-I" system_includes[i])
-    for (i in isystem_system_includes) {
-        append(args, "-isystem")
-        append(args, isystem_system_includes[i])
-    }
+    for (i in isystem_system_includes) append2(args, "-isystem", isystem_system_includes[i])
 
     # Add library search paths.
     for (l in libdirs) append(args, "-L" libdirs[l])
@@ -624,21 +670,14 @@ END {
 
     # Add RPATHs.
     if (spack_mode == "ccld") {
-        if (ENVIRON["SPACK_DTAGS_TO_ADD"])
-            append(args, ENVIRON["SPACK_LINKER_ARG"] ENVIRON["SPACK_DTAGS_TO_ADD"])
+        if (ENVIRON["SPACK_DTAGS_TO_ADD"]) append(args, ENVIRON["SPACK_LINKER_ARG"] ENVIRON["SPACK_DTAGS_TO_ADD"])
         for (r in rpaths) append(args, spack_rpath_arg rpaths[r])
         for (r in system_rpaths) append(args, spack_rpath_arg system_rpaths[r])
     }
     else if (spack_mode == "ld") {
         if (ENVIRON["SPACK_DTAGS_TO_ADD"]) append(args, ENVIRON["SPACK_DTAGS_TO_ADD"])
-        for (r in rpaths) {
-            append(args, "-rpath")
-            append(args, rpaths[r])
-        }
-        for (r in system_rpaths) {
-            append(args, "-rpath")
-            append(args, system_rpaths[r])
-        }
+        for (r in rpaths) append2(args, "-rpath", rpaths[r])
+        for (r in system_rpaths) append2(args, "-rpath", system_rpaths[r])
     }
 
     # Add other arguments from the input command.
@@ -652,8 +691,7 @@ END {
 END {
     for (a in args) print(args[a])
 }
-EOF
-}
+'
 
 # Set $SPACK_arg_filter to a '\n'-delimited string of entries to use to filter
 # out arguments from the awk script used to process arguments. Arguments are
@@ -693,10 +731,19 @@ export SPACK_rpath="$rpath"
 # - $SPACK_LINKER_ARG
 
 # Execute awk to generate a newline-delimited command string.
-newline_command_string="$(printf '%s\n' "$@" | path_safe_awk "$(produce_awk_args_script)")"
+# Note: the '-L' flag can be set for gnu awk to warn about behavior undefined by
+# POSIX. When editing the complex awk script here, it is recommended to set the
+# '-L' flag in this invocation and insert an 'exit 1' after invoking awk, then
+# attempt to 'spack install' something (e.g. gnupg) and inspect the config.log
+# file after the ./configure script fails to see if e.g. any uninitialized
+# arrays were used.
+newline_command_string="$(printf '%s\n' "$@" | path_safe_awk "$awk_args_script")"
+if [ "$?" -ne 0 ]; then
+    exit "$?"
+fi
 
 # Prepend the ccache binary if we're using ccache.
-if [ -n "$SPACK_CCACHE_BINARY" ]; then
+if [ -n "${SPACK_CCACHE_BINARY:-}" ]; then
     case "$lang_flags" in
         C|CXX)  # ccache only supports C languages
             newline_command_string="${SPACK_CCACHE_BINARY}\n${newline_command_string}"
@@ -723,7 +770,7 @@ readonly spaced_command_string="$(echo "$newline_command_string" | tr '\n' ' ')"
 #
 # Write the input and output commands to debug logs if it's asked for.
 #
-if [ "$SPACK_DEBUG" = 'TRUE' ]; then
+if [ "${SPACK_DEBUG:-}" = 'TRUE' ]; then
     input_log="${SPACK_DEBUG_LOG_DIR}/spack-cc-$SPACK_DEBUG_LOG_ID.in.log"
     output_log="${SPACK_DEBUG_LOG_DIR}/spack-cc-$SPACK_DEBUG_LOG_ID.out.log"
     echo "[${mode}] ${command} ${input_command}" >> "$input_log"
