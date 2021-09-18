@@ -107,7 +107,7 @@ def wrapper_environment():
             SPACK_LINK_DIRS=None,
             SPACK_INCLUDE_DIRS=None,
             SPACK_RPATH_DIRS=None,
-            SPACK_TARGET_ARGS='',
+            SPACK_TARGET_ARGS='\n',
             SPACK_LINKER_ARG='-Wl,',
             SPACK_DTAGS_TO_ADD='--disable-new-dtags',
             SPACK_DTAGS_TO_STRIP='--enable-new-dtags'):

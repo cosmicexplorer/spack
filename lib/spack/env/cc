@@ -145,7 +145,6 @@ check_param_is_set() {
     eval "_ \${${param_name}:?Spack compiler must be run from Spack! Input '$param_name' is missing.}"
 }
 
-## Read input parameters into ???.
 # SPACK_SYSTEM_DIRS is delimited by :
 readonly SPACK_SYSTEM_DIRS="$(IFS=':' canonicalize_paths "$SPACK_SYSTEM_DIRS")"
 
@@ -232,8 +231,8 @@ case "$command" in
         die "Unknown command '$command' selected. Compiler was: $SPACK_COMPILER_SPEC."
         ;;
 esac
-# If not set explicitly above, the value of $comp is set to the string 'CC'.
 _ ${comp:='CC'}
+_ ${lang_flags:=''}
 
 # If any of the arguments below are present, then the mode is vcheck.
 # In vcheck mode, nothing is added in terms of extra search paths or
@@ -327,7 +326,7 @@ BEGIN {
     # Track whether any -isystem arguments were provided.
     isystem_was_used = 0
     # Allow filtering out specific arguments from the parent script.
-    split(ENVIRON["SPACK_arg_filter"], arg_filter, "\n")
+    split(ENVIRON["SPACK_arg_filter"], spack_arg_filter, "\n")
 }
 
 # Add environment variables used to reconstruct the final command line, but not
@@ -335,7 +334,8 @@ BEGIN {
 END {
     spack_command = assert_nonempty(ENVIRON["SPACK_command"], "$SPACK_command")
     spack_mode = assert_nonempty(ENVIRON["SPACK_mode"], "$SPACK_mode")
-    spack_lang_flags = assert_nonempty(ENVIRON["SPACK_lang_flags"], "$SPACK_lang_flags")
+    # This may legitimately be an empty string.
+    spack_lang_flags = ENVIRON["SPACK_lang_flags"]
     spack_add_debug_flags = assert_nonempty(ENVIRON["SPACK_ADD_DEBUG_FLAGS"], "$SPACK_ADD_DEBUG_FLAGS")
     # SPACK_<LANG>FLAGS and SPACK_LDLIBS are split by " "
     split(ENVIRON["SPACK_FFLAGS"], spack_fflags, " ")
@@ -407,9 +407,9 @@ function assert_nonempty(arg, description) {
 }
 
 function is_filtered_arg(arg) {
-    for (i in arg_filter) {
+    for (i in spack_arg_filter) {
         # If arg_filter[i] occurs as a substring of arg, this succeeds.
-        if (index(arg, arg_filter[i])) return 1
+        if (index(arg, spack_arg_filter[i])) return 1
     }
     return 0
 }
@@ -449,8 +449,8 @@ function option_processing_loop() {
     # Multiple consecutive spaces in the command line can result in blank
     # arguments, so we remove those. We assume blank arguments are meaningless
     # to any tool we would invoke.
-    if (/^$/) getline
-    if (is_filtered_arg($0)) getline
+    if (/^$/) return
+    if (is_filtered_arg($0)) return
 
     if (sub(/^-isystem/, "")) {
         isystem_was_used = 1
