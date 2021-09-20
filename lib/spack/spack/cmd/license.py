@@ -5,6 +5,8 @@
 
 from __future__ import print_function
 
+import datetime
+import multiprocessing
 import os
 import re
 from collections import defaultdict
@@ -23,7 +25,10 @@ level = "long"
 git = which('git')
 
 #: SPDX license id must appear in the first <license_lines> lines of a file
-license_lines = 7
+license_lines = 10
+
+#: the current year
+current_year = datetime.datetime.now().year
 
 #: Spack's license identifier
 apache2_mit_spdx = "(Apache-2.0 OR MIT)"
@@ -99,11 +104,9 @@ def list_files(args):
 
 
 # Error codes for license verification. All values are chosen such that
-# bool(value) evaluates to True
-OLD_LICENSE, SPDX_MISMATCH, GENERAL_MISMATCH = range(1, 4)
-
-strict_date = r'Copyright 2013-2021'
-
+# bool(value) evaluates to True.
+num_errors = 3
+OLD_LICENSE, SPDX_MISMATCH, GENERAL_MISMATCH = range(1, num_errors + 1)
 
 class LicenseError(object):
     def __init__(self):
@@ -127,30 +130,41 @@ class LicenseError(object):
             'files not containing expected license:      %d' % missing)
 
 
+copyright_year_pattern = re.compile('Copyright 2013-(202[01]) Lawrence Livermore National Security, LLC and other')  # noqa: E501
+
+
 def _check_license(lines, path):
-    license_lines = [
-        r'Copyright 2013-(?:202[01]) Lawrence Livermore National Security, LLC and other',  # noqa: E501
-        r'Spack Project Developers\. See the top-level COPYRIGHT file for details.',  # noqa: E501
-        r'SPDX-License-Identifier: \(Apache-2\.0 OR MIT\)'
+    remaining_license_lines = [
+        'Spack Project Developers. See the top-level COPYRIGHT file for details.',
+        'SPDX-License-Identifier: (Apache-2.0 OR MIT)',
     ]
 
     found = []
 
+    copyright_year_found = False
+
     for line in lines:
         line = re.sub(r'^[\s#\%\.]*', '', line)
         line = line.rstrip()
-        for i, license_line in enumerate(license_lines):
-            if re.match(license_line, line):
+        if not line:
+            continue
+        if not copyright_year_found:
+            copyright_year_match = copyright_year_pattern.match(line)
+            if copyright_year_match:
                 # The first line of the license contains the copyright date.
                 # We allow it to be out of date but print a warning if it is
                 # out of date.
-                if i == 0:
-                    if not re.search(strict_date, line):
-                        tty.debug('{0}: copyright date mismatch'.format(path))
-                found.append(i)
-
-    if len(found) == len(license_lines) and found == list(sorted(found)):
-        return
+                matched_year = int(copyright_year_match.group(1))
+                if matched_year != current_year:
+                    tty.debug('{0}: copyright date mismatch (was: {1})'
+                              .format(path, matched_year))
+            copyright_year_found = True
+        else:
+            if line == remaining_license_lines[0]:
+                if len(remaining_license_lines) > 1:
+                    remaining_license_lines = remaining_license_lines[1:]
+                else:
+                    return 0
 
     def old_license(line, path):
         if re.search('This program is free software', line):
@@ -175,9 +189,20 @@ def _check_license(lines, path):
             if error:
                 return error
 
-    print('{0}: the license header at the top of the file does not match the \
-          expected format'.format(path))
+    print('{0}: the license header at the top of the file does not match the expected format'.format(path))  # noqa: E501
     return GENERAL_MISMATCH
+
+
+def process_file(path):
+    f = open(path)
+    lines = []
+    for index, line in enumerate(f):
+        if (index == 0) and line.startswith('#!'):
+            continue
+        if index > license_lines:
+            break
+        lines.append(line)
+    return _check_license(lines, path)
 
 
 def verify(args):
@@ -185,14 +210,19 @@ def verify(args):
 
     license_errors = LicenseError()
 
-    for relpath in _licensed_files(args):
-        path = os.path.join(args.root, relpath)
-        with open(path) as f:
-            lines = [line for line in f][:license_lines]
+    def process_relpath(relpath_iter):
+        for relpath in relpath_iter:
+            path = os.path.join(args.root, relpath)
+            yield path
 
-        error = _check_license(lines, path)
-        if error:
-            license_errors.add_error(error)
+    pool = multiprocessing.Pool()
+
+    for rc in pool.imap_unordered(process_file, process_relpath(_licensed_files(args)),
+                                  20):
+        if rc:
+            license_errors.add_error(rc)
+    pool.close()
+    pool.join()
 
     if license_errors.has_errors():
         tty.die(*license_errors.error_messages())
@@ -207,7 +237,7 @@ def update_copyright_year(args):
     for filename in _licensed_files(args):
         fs.filter_file(
             r'Copyright \d{4}-\d{4}' + llns_and_other,
-            strict_date + llns_and_other,
+            'Copyright 2013-{0}'.format(current_year) + llns_and_other,
             os.path.join(args.root, filename)
         )
 
