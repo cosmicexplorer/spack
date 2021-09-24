@@ -1,0 +1,828 @@
+diff --git a/Makefile b/Makefile
+index a21c0d63..d4451dde 100644
+--- a/Makefile
++++ b/Makefile
+@@ -9,7 +9,7 @@
+ # $ make install
+ # $ make test_python
+ 
+-WAFCMD=python waf
++WAFCMD=python3 waf
+ 
+ #WAFOPTS:=
+ # turn on verbose mode
+@@ -89,7 +89,7 @@ delete_install:
+ 
+ build_python:
+ 	# build python-aubio, using locally built libaubio if found
+-	python ./setup.py build
++	python3 ./setup.py build
+ 
+ build_python_extlib:
+ 	# build python-aubio using (locally) installed libaubio
+diff --git a/python/demos/demo_alsa.py b/python/demos/demo_alsa.py
+index cd58a338..fa781a2a 100755
+--- a/python/demos/demo_alsa.py
++++ b/python/demos/demo_alsa.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import alsaaudio
+ import numpy as np
+diff --git a/python/demos/demo_bench_yin.py b/python/demos/demo_bench_yin.py
+index 0d03c05c..58351fab 100755
+--- a/python/demos/demo_bench_yin.py
++++ b/python/demos/demo_bench_yin.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ from aubio import pitch
+diff --git a/python/demos/demo_bpm_extract.py b/python/demos/demo_bpm_extract.py
+index b04ebeab..3489adbc 100755
+--- a/python/demos/demo_bpm_extract.py
++++ b/python/demos/demo_bpm_extract.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from aubio import source, tempo
+ from numpy import median, diff
+diff --git a/python/demos/demo_create_test_sounds.py b/python/demos/demo_create_test_sounds.py
+index 3d2f2d06..253c98ca 100755
+--- a/python/demos/demo_create_test_sounds.py
++++ b/python/demos/demo_create_test_sounds.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ 
+ import sys, os
+diff --git a/python/demos/demo_filter.py b/python/demos/demo_filter.py
+index ab3df6dc..328b988f 100755
+--- a/python/demos/demo_filter.py
++++ b/python/demos/demo_filter.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ import os.path
+diff --git a/python/demos/demo_filterbank.py b/python/demos/demo_filterbank.py
+index ec29d114..46219b1a 100755
+--- a/python/demos/demo_filterbank.py
++++ b/python/demos/demo_filterbank.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ """Create a filterbank from a list of frequencies.
+ 
+diff --git a/python/demos/demo_filterbank_slaney.py b/python/demos/demo_filterbank_slaney.py
+index f0e041e2..71ff6276 100755
+--- a/python/demos/demo_filterbank_slaney.py
++++ b/python/demos/demo_filterbank_slaney.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from aubio import filterbank
+ from numpy import arange, vstack
+diff --git a/python/demos/demo_filterbank_triangle_bands.py b/python/demos/demo_filterbank_triangle_bands.py
+index c65df93d..4f8afbdb 100755
+--- a/python/demos/demo_filterbank_triangle_bands.py
++++ b/python/demos/demo_filterbank_triangle_bands.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from aubio import filterbank, fvec
+ from pylab import loglog, show, subplot, xlim, ylim, xlabel, ylabel, title
+diff --git a/python/demos/demo_keyboard.py b/python/demos/demo_keyboard.py
+index 63786b9b..48725eda 100755
+--- a/python/demos/demo_keyboard.py
++++ b/python/demos/demo_keyboard.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ def get_keyboard_edges(firstnote = 21, lastnote = 108):
+     octaves = 10
+diff --git a/python/demos/demo_mel-energy.py b/python/demos/demo_mel-energy.py
+index db27f7e2..bae46b8c 100755
+--- a/python/demos/demo_mel-energy.py
++++ b/python/demos/demo_mel-energy.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, pvoc, filterbank
+diff --git a/python/demos/demo_mfcc.py b/python/demos/demo_mfcc.py
+index 5a33d15f..5580c3b8 100755
+--- a/python/demos/demo_mfcc.py
++++ b/python/demos/demo_mfcc.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, pvoc, mfcc
+diff --git a/python/demos/demo_miditofreq.py b/python/demos/demo_miditofreq.py
+index c325fb50..1a1c6d96 100755
+--- a/python/demos/demo_miditofreq.py
++++ b/python/demos/demo_miditofreq.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from aubio import miditofreq
+ from numpy import arange
+diff --git a/python/demos/demo_notes.py b/python/demos/demo_notes.py
+index 301013a6..c7e762f3 100755
+--- a/python/demos/demo_notes.py
++++ b/python/demos/demo_notes.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, notes
+diff --git a/python/demos/demo_onset.py b/python/demos/demo_onset.py
+index 43e4aede..a39e7742 100755
+--- a/python/demos/demo_onset.py
++++ b/python/demos/demo_onset.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, onset
+diff --git a/python/demos/demo_onset_plot.py b/python/demos/demo_onset_plot.py
+index 5169cf7c..4f3ee94c 100755
+--- a/python/demos/demo_onset_plot.py
++++ b/python/demos/demo_onset_plot.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import onset, source
+diff --git a/python/demos/demo_pitch.py b/python/demos/demo_pitch.py
+index 555a30e6..b5fbaf7b 100755
+--- a/python/demos/demo_pitch.py
++++ b/python/demos/demo_pitch.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, pitch
+diff --git a/python/demos/demo_pitch_sinusoid.py b/python/demos/demo_pitch_sinusoid.py
+index b7ef7b42..823d5a62 100755
+--- a/python/demos/demo_pitch_sinusoid.py
++++ b/python/demos/demo_pitch_sinusoid.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ import aubio
+diff --git a/python/demos/demo_pyaudio.py b/python/demos/demo_pyaudio.py
+index 4c14cd54..a6f5923b 100755
+--- a/python/demos/demo_pyaudio.py
++++ b/python/demos/demo_pyaudio.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ # Use pyaudio to open the microphone and run aubio.pitch on the stream of
+ # incoming samples. If a filename is given as the first argument, it will
+diff --git a/python/demos/demo_pysoundcard_play.py b/python/demos/demo_pysoundcard_play.py
+index 3517d623..29bf0318 100755
+--- a/python/demos/demo_pysoundcard_play.py
++++ b/python/demos/demo_pysoundcard_play.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ def play_source(source_path):
+     """Play an audio file using pysoundcard."""
+diff --git a/python/demos/demo_pysoundcard_record.py b/python/demos/demo_pysoundcard_record.py
+index b97a838d..c40f5808 100755
+--- a/python/demos/demo_pysoundcard_record.py
++++ b/python/demos/demo_pysoundcard_record.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ def record_sink(sink_path):
+     """Record an audio file using pysoundcard."""
+diff --git a/python/demos/demo_reading_speed.py b/python/demos/demo_reading_speed.py
+index 90739f3f..28a110c5 100755
+--- a/python/demos/demo_reading_speed.py
++++ b/python/demos/demo_reading_speed.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ 
+ """
+diff --git a/python/demos/demo_simple_robot_voice.py b/python/demos/demo_simple_robot_voice.py
+index 670f79f0..5797e161 100755
+--- a/python/demos/demo_simple_robot_voice.py
++++ b/python/demos/demo_simple_robot_voice.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, sink, pvoc
+diff --git a/python/demos/demo_simple_spectral_weighting.py b/python/demos/demo_simple_spectral_weighting.py
+index dd4abbe4..b879280e 100755
+--- a/python/demos/demo_simple_spectral_weighting.py
++++ b/python/demos/demo_simple_spectral_weighting.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, sink, pvoc
+diff --git a/python/demos/demo_sink.py b/python/demos/demo_sink.py
+index ce2bb1b6..5c298a66 100755
+--- a/python/demos/demo_sink.py
++++ b/python/demos/demo_sink.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, sink
+diff --git a/python/demos/demo_sink_create_woodblock.py b/python/demos/demo_sink_create_woodblock.py
+index 5a42adcb..e4cf00d8 100755
+--- a/python/demos/demo_sink_create_woodblock.py
++++ b/python/demos/demo_sink_create_woodblock.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from math import pi, e
+diff --git a/python/demos/demo_sink_multi.py b/python/demos/demo_sink_multi.py
+index 70eb6360..6564ba97 100755
+--- a/python/demos/demo_sink_multi.py
++++ b/python/demos/demo_sink_multi.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, sink
+diff --git a/python/demos/demo_slicing.py b/python/demos/demo_slicing.py
+index d10d0af6..f5dea81e 100755
+--- a/python/demos/demo_slicing.py
++++ b/python/demos/demo_slicing.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ import os.path
+diff --git a/python/demos/demo_source.py b/python/demos/demo_source.py
+index c60d785f..fd5b98f9 100755
+--- a/python/demos/demo_source.py
++++ b/python/demos/demo_source.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source
+diff --git a/python/demos/demo_source_simple.py b/python/demos/demo_source_simple.py
+index f0577f8c..e517cca6 100755
+--- a/python/demos/demo_source_simple.py
++++ b/python/demos/demo_source_simple.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ """A simple example using aubio.source."""
+ 
+diff --git a/python/demos/demo_specdesc.py b/python/demos/demo_specdesc.py
+index 6afc7f48..2f2d08d2 100755
+--- a/python/demos/demo_specdesc.py
++++ b/python/demos/demo_specdesc.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ import numpy as np
+diff --git a/python/demos/demo_spectrogram.py b/python/demos/demo_spectrogram.py
+index 51be9174..1f861359 100755
+--- a/python/demos/demo_spectrogram.py
++++ b/python/demos/demo_spectrogram.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys, os.path
+ from aubio import pvoc, source, float_type
+diff --git a/python/demos/demo_tapthebeat.py b/python/demos/demo_tapthebeat.py
+index 0483379d..570e4ac4 100755
+--- a/python/demos/demo_tapthebeat.py
++++ b/python/demos/demo_tapthebeat.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ """ A simple demo using aubio and pyaudio to play beats in real time
+ 
+diff --git a/python/demos/demo_tempo.py b/python/demos/demo_tempo.py
+index 51e1ae32..613c79c7 100755
+--- a/python/demos/demo_tempo.py
++++ b/python/demos/demo_tempo.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import tempo, source
+diff --git a/python/demos/demo_tempo_plot.py b/python/demos/demo_tempo_plot.py
+index 48a6ccf3..ab701daa 100755
+--- a/python/demos/demo_tempo_plot.py
++++ b/python/demos/demo_tempo_plot.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import tempo, source
+diff --git a/python/demos/demo_timestretch.py b/python/demos/demo_timestretch.py
+index 2271d01a..ef60e859 100755
+--- a/python/demos/demo_timestretch.py
++++ b/python/demos/demo_timestretch.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ # Implementation of the timescale algorithm according to Dan Ellis, *A Phase
+ # Vocoder in Matlab*.  http://www.ee.columbia.edu/~dpwe/resources/matlab/pvoc/
+diff --git a/python/demos/demo_timestretch_online.py b/python/demos/demo_timestretch_online.py
+index df703653..a29db04e 100755
+--- a/python/demos/demo_timestretch_online.py
++++ b/python/demos/demo_timestretch_online.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ # Implementation of the timescale algorithm according to Dan Ellis, *A Phase
+ # Vocoder in Matlab*.  http://www.ee.columbia.edu/~dpwe/resources/matlab/pvoc/
+diff --git a/python/demos/demo_tss.py b/python/demos/demo_tss.py
+index 1a56b4f0..6f26f083 100755
+--- a/python/demos/demo_tss.py
++++ b/python/demos/demo_tss.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source, sink, pvoc, tss
+diff --git a/python/demos/demo_wav2midi.py b/python/demos/demo_wav2midi.py
+index 48c2d0a4..653d8335 100755
+--- a/python/demos/demo_wav2midi.py
++++ b/python/demos/demo_wav2midi.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ # Simple demo to extract notes from a sound file, and store them in a midi file
+ # using mido.
+diff --git a/python/demos/demo_waveform_plot.py b/python/demos/demo_waveform_plot.py
+index 54342239..63ab0780 100755
+--- a/python/demos/demo_waveform_plot.py
++++ b/python/demos/demo_waveform_plot.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ from aubio import source
+diff --git a/python/demos/demo_yin_compare.py b/python/demos/demo_yin_compare.py
+index 6842368a..62791d0f 100755
+--- a/python/demos/demo_yin_compare.py
++++ b/python/demos/demo_yin_compare.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ # -*- coding: utf8 -*-
+ 
+ """ Pure python implementation of the sum of squared difference
+diff --git a/python/lib/aubio/__init__.py b/python/lib/aubio/__init__.py
+index ebe0fa89..bbe2734b 100644
+--- a/python/lib/aubio/__init__.py
++++ b/python/lib/aubio/__init__.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ # -*- coding: utf8 -*-
+ 
+ """
+diff --git a/python/lib/aubio/cmd.py b/python/lib/aubio/cmd.py
+index 05780ead..2fcb340c 100644
+--- a/python/lib/aubio/cmd.py
++++ b/python/lib/aubio/cmd.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ 
+ """aubio command line tool
+diff --git a/python/lib/aubio/cut.py b/python/lib/aubio/cut.py
+index a31e38dd..80fdb902 100644
+--- a/python/lib/aubio/cut.py
++++ b/python/lib/aubio/cut.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ """ this file was written by Paul Brossier
+   it is released under the GNU/GPL license.
+diff --git a/python/tests/eval_pitch b/python/tests/eval_pitch
+index f65173f4..288f1239 100755
+--- a/python/tests/eval_pitch
++++ b/python/tests/eval_pitch
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ """
+ Script to evaluate pitch algorithms against TONAS database.
+diff --git a/python/tests/test_aubio.py b/python/tests/test_aubio.py
+index 5768cac9..c6eb8579 100755
+--- a/python/tests/test_aubio.py
++++ b/python/tests/test_aubio.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase
+ 
+diff --git a/python/tests/test_aubio_cmd.py b/python/tests/test_aubio_cmd.py
+index 471ac85c..4cc0fa02 100755
+--- a/python/tests/test_aubio_cmd.py
++++ b/python/tests/test_aubio_cmd.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase
+ import aubio.cmd
+diff --git a/python/tests/test_aubio_cut.py b/python/tests/test_aubio_cut.py
+index 01ad2c6f..31297b81 100755
+--- a/python/tests/test_aubio_cut.py
++++ b/python/tests/test_aubio_cut.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import aubio.cut
+ from numpy.testing import TestCase
+diff --git a/python/tests/test_cvec.py b/python/tests/test_cvec.py
+index 73ee6549..5407b667 100755
+--- a/python/tests/test_cvec.py
++++ b/python/tests/test_cvec.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ from numpy.testing import TestCase, assert_equal
+diff --git a/python/tests/test_dct.py b/python/tests/test_dct.py
+index c9b2ba7a..67b7c2c8 100755
+--- a/python/tests/test_dct.py
++++ b/python/tests/test_dct.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ 
+ import numpy as np
+diff --git a/python/tests/test_fft.py b/python/tests/test_fft.py
+index abe95d3f..79c1cc85 100755
+--- a/python/tests/test_fft.py
++++ b/python/tests/test_fft.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase
+ from numpy.testing import assert_equal, assert_almost_equal
+diff --git a/python/tests/test_filter.py b/python/tests/test_filter.py
+index 576ae11d..e3ed17e9 100755
+--- a/python/tests/test_filter.py
++++ b/python/tests/test_filter.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+ from aubio import fvec, digital_filter
+diff --git a/python/tests/test_filterbank.py b/python/tests/test_filterbank.py
+index 67a8558c..15fbc627 100755
+--- a/python/tests/test_filterbank.py
++++ b/python/tests/test_filterbank.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+diff --git a/python/tests/test_filterbank_mel.py b/python/tests/test_filterbank_mel.py
+index 07712647..cbe432a3 100755
+--- a/python/tests/test_filterbank_mel.py
++++ b/python/tests/test_filterbank_mel.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+diff --git a/python/tests/test_fvec.py b/python/tests/test_fvec.py
+index 765c9fed..4d37da7d 100755
+--- a/python/tests/test_fvec.py
++++ b/python/tests/test_fvec.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+diff --git a/python/tests/test_fvec_shift.py b/python/tests/test_fvec_shift.py
+index c7a03154..1de7de13 100644
+--- a/python/tests/test_fvec_shift.py
++++ b/python/tests/test_fvec_shift.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ from numpy.testing import TestCase, assert_equal
+diff --git a/python/tests/test_hist.py.old b/python/tests/test_hist.py.old
+index baefa409..e32d4dc9 100644
+--- a/python/tests/test_hist.py.old
++++ b/python/tests/test_hist.py.old
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+ from aubio import fvec, digital_filter
+diff --git a/python/tests/test_hztomel.py b/python/tests/test_hztomel.py
+index fcd8fa1d..97b8ef5e 100755
+--- a/python/tests/test_hztomel.py
++++ b/python/tests/test_hztomel.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from unittest import main
+ from numpy.testing import TestCase
+diff --git a/python/tests/test_mathutils.py b/python/tests/test_mathutils.py
+index ee68966c..63dce527 100755
+--- a/python/tests/test_mathutils.py
++++ b/python/tests/test_mathutils.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal
+ from numpy import array, arange, isnan, isinf
+diff --git a/python/tests/test_mfcc.py b/python/tests/test_mfcc.py
+index fed7eb85..7de5d01f 100755
+--- a/python/tests/test_mfcc.py
++++ b/python/tests/test_mfcc.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from _tools import parametrize, assert_raises
+ from numpy import random, count_nonzero
+diff --git a/python/tests/test_midi2note.py b/python/tests/test_midi2note.py
+index 5451c581..37a4c3ba 100755
+--- a/python/tests/test_midi2note.py
++++ b/python/tests/test_midi2note.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ 
+ from aubio import midi2note
+diff --git a/python/tests/test_musicutils.py b/python/tests/test_musicutils.py
+index eaa774f2..316c6005 100755
+--- a/python/tests/test_musicutils.py
++++ b/python/tests/test_musicutils.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import numpy as np
+ from numpy.testing import TestCase
+diff --git a/python/tests/test_note2midi.py b/python/tests/test_note2midi.py
+index 06081958..82d1cef2 100755
+--- a/python/tests/test_note2midi.py
++++ b/python/tests/test_note2midi.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ 
+ from __future__ import unicode_literals
+diff --git a/python/tests/test_notes.py b/python/tests/test_notes.py
+index a95d0101..5a420ce8 100755
+--- a/python/tests/test_notes.py
++++ b/python/tests/test_notes.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+ from aubio import notes, source
+diff --git a/python/tests/test_onset.py b/python/tests/test_onset.py
+index 08edbeef..727d4380 100755
+--- a/python/tests/test_onset.py
++++ b/python/tests/test_onset.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+ from aubio import onset, fvec
+diff --git a/python/tests/test_peakpicker.py.old b/python/tests/test_peakpicker.py.old
+index 08313d12..92004924 100755
+--- a/python/tests/test_peakpicker.py.old
++++ b/python/tests/test_peakpicker.py.old
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+ from aubio import peakpicker, fvec
+diff --git a/python/tests/test_phasevoc.py b/python/tests/test_phasevoc.py
+index cf3b7ac8..7495f435 100755
+--- a/python/tests/test_phasevoc.py
++++ b/python/tests/test_phasevoc.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal, assert_array_less
+ from _tools import parametrize
+diff --git a/python/tests/test_pitch.py b/python/tests/test_pitch.py
+index 63055320..0cc9f36f 100755
+--- a/python/tests/test_pitch.py
++++ b/python/tests/test_pitch.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal
+ from numpy import sin, arange, mean, median, isnan, pi
+diff --git a/python/tests/test_scale.py.old b/python/tests/test_scale.py.old
+index 279af4b5..92fbb2ca 100755
+--- a/python/tests/test_scale.py.old
++++ b/python/tests/test_scale.py.old
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, run_module_suite
+ from numpy.testing import assert_equal, assert_almost_equal
+diff --git a/python/tests/test_sink.py b/python/tests/test_sink.py
+index 9516fe4f..869d697d 100755
+--- a/python/tests/test_sink.py
++++ b/python/tests/test_sink.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase
+ from aubio import fvec, source, sink
+diff --git a/python/tests/test_slicing.py b/python/tests/test_slicing.py
+index 18391e9e..83a46f33 100755
+--- a/python/tests/test_slicing.py
++++ b/python/tests/test_slicing.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal
+ from aubio import slice_source_at_stamps
+diff --git a/python/tests/test_source.py b/python/tests/test_source.py
+index 8b35e774..48575f23 100755
+--- a/python/tests/test_source.py
++++ b/python/tests/test_source.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ 
+ from numpy.testing import TestCase, assert_equal
+diff --git a/python/tests/test_source_channels.py b/python/tests/test_source_channels.py
+index eee696d6..c147a217 100755
+--- a/python/tests/test_source_channels.py
++++ b/python/tests/test_source_channels.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ """A brute force test using `sink` to create and write samples to a stereo
+ file, then `source` to check the correct content is read from the files."""
+diff --git a/python/tests/test_specdesc.py b/python/tests/test_specdesc.py
+index 32a46fe7..2c78031f 100755
+--- a/python/tests/test_specdesc.py
++++ b/python/tests/test_specdesc.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+ from numpy import random, arange, log, zeros
+diff --git a/python/tests/test_tempo.py b/python/tests/test_tempo.py
+index cf183c90..afae3e7a 100755
+--- a/python/tests/test_tempo.py
++++ b/python/tests/test_tempo.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from unittest import main
+ from numpy.testing import TestCase, assert_equal, assert_almost_equal
+diff --git a/python/tests/test_zero_crossing_rate.py b/python/tests/test_zero_crossing_rate.py
+index 21f9e405..48eaf40a 100755
+--- a/python/tests/test_zero_crossing_rate.py
++++ b/python/tests/test_zero_crossing_rate.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ from numpy.testing import TestCase
+ from aubio import fvec, zero_crossing_rate
+diff --git a/python/tests/utils.py b/python/tests/utils.py
+index 4b414883..37f40411 100644
+--- a/python/tests/utils.py
++++ b/python/tests/utils.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import os
+ import re
+diff --git a/scripts/get_waf.sh b/scripts/get_waf.sh
+index c7d92171..9a2e4af2 100755
+--- a/scripts/get_waf.sh
++++ b/scripts/get_waf.sh
+@@ -39,7 +39,7 @@ function fetchwaf () {
+ function buildwaf () {
+   tar xf $WAFTARBALL
+   pushd waf-$WAFVERSION
+-  NOCLIMB=1 python waf-light --tools=c_emscripten $*
++  NOCLIMB=1 python3 waf-light --tools=c_emscripten $*
+   popd
+ }
+ 
+diff --git a/setup.py b/setup.py
+index 88f8f070..ffd8f442 100755
+--- a/setup.py
++++ b/setup.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ import sys
+ import os.path
+diff --git a/tests/create_tests_source.py b/tests/create_tests_source.py
+index 1feb1443..eba3c3a4 100755
+--- a/tests/create_tests_source.py
++++ b/tests/create_tests_source.py
+@@ -1,4 +1,4 @@
+-#! /usr/bin/env python
++#! /usr/bin/env python3
+ 
+ """ Create a simple stereo file containing a sine tone at 441 Hz, using only
+ python's built-in modules. """
+diff --git a/tests/wscript_build b/tests/wscript_build
+index c99a051e..f0e1385c 100644
+--- a/tests/wscript_build
++++ b/tests/wscript_build
+@@ -13,7 +13,7 @@ test_sound_abspath = bld.path.get_bld().make_node(test_sound_target)
+ test_sound_abspath = str(test_sound_abspath).replace('\\', '\\\\')
+ 
+ b = bld(name='create_tests_source',
+-    rule='python ${SRC} ${TGT}',
++    rule='python3 ${SRC} ${TGT}',
+     source='create_tests_source.py',
+     target=test_sound_target)
+ # use post() to create the task, keep a reference to it

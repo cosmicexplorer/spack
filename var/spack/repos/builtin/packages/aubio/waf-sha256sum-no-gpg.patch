@@ -1,0 +1,26 @@
+diff --git a/scripts/get_waf.sh b/scripts/get_waf.sh
+index c7d9217..ae7e41f 100755
+--- a/scripts/get_waf.sh
++++ b/scripts/get_waf.sh
+@@ -1,4 +1,4 @@
+-#! /bin/bash
++#! /usr/bin/env bash
+ 
+ set -e
+ #set -x
+@@ -21,13 +21,8 @@ function download () {
+ }
+ 
+ function checkwaf () {
+-  download $WAFTARBALL.asc $WAFURL.asc
+-  if [[ -z `which gpg` ]]
+-  then
+-    echo "Warning: gpg not found, not verifying signature for $WAFTARBALL"
+-  else
+-    download - $WAFUPSTREAMKEY | gpg --import
+-    gpg --verify $WAFTARBALL.asc || exit 1
++  if [[ "$(sha256sum "$WAFTARBALL" | awk '{print $1}')" != 'c74055d7452540ad66c12d955c09f62a9fde0e23b0ab3c43984dc879b4bb51f4' ]]; then
++    exit 1
+   fi
+ }
+ 

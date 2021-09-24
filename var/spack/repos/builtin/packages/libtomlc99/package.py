@@ -19,7 +19,7 @@ class Libtomlc99(Package):
     # Unfortunately, upstream Makefile does not build shared libaries, so use
     # local changes for now.
     version('0.2019.05.02', commit='35118431263dec2a2a7b55e4dd717a5f54992e3e',
-            sha256sum='f131679131c1fcb012004a3334abb2b77a329490549c4d68455ba4ec55af9b10',
+            sha256='f131679131c1fcb012004a3334abb2b77a329490549c4d68455ba4ec55af9b10',
             git="https://github.com/obreitwi/tomlc99.git")
     # Does not build shared libraries.
     version('0.2019.03.06', commit='bd76f1276ee5f5df0eb064f1842af5ad1737cf1e')

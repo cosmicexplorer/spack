@@ -13,11 +13,23 @@ class Libsigcpp(AutotoolsPackage):
     url      = "https://ftp.acc.umu.se/pub/GNOME/sources/libsigc++/2.99/libsigc++-2.99.12.tar.xz"
     list_url = "https://ftp.acc.umu.se/pub/GNOME/sources/libsigc++/"
     list_depth = 1
+    git      = 'https://github.com/libsigcplusplus/libsigcplusplus'
 
+    version('3.0.7', sha256='bfbe91c0d094ea6bbc6cbd3909b7d98c6561eea8b6d9c0c25add906a6e83d733')
     version('2.99.12', sha256='d902ae277f5baf2d56025586e2153cc2f158472e382723c67f49049f7c6690a8')
     version('2.9.3', sha256='0bf9b301ad6198c550986c51150a646df198e8d1d235270c16486b0dda30097f')
     version('2.1.1', sha256='7a2bd0b521544b31051c476205a0e74ace53771ec1a939bfec3c297b50c9fd78')
     version('2.0.3', sha256='6ee6d5f164d8a34da33d2251cdb348b4f5769bf993ed8a6d4055bd47562f94a2')
+
+    with when('@:2.0.3'):
+        patch('cstddef.patch')
+
+    with when('@3:'):
+        depends_on('mm-common', type='build')
+
+        def autoreconf(self, spec, prefix):
+            autogen = Executable('./autogen.sh')
+            autogen()
 
     def url_for_version(self, version):
         """Handle version-based custom URLs."""
@@ -26,4 +38,4 @@ class Libsigcpp(AutotoolsPackage):
         return url + "/%s/libsigc++-%s%s" % (version.up_to(2), version, ext)
 
     def configure_args(self):
-        return ['--enable-static']
+        return ['--enable-static', 'CXXFLAGS=-fpermissive']

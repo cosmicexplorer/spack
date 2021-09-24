@@ -1,0 +1,12 @@
+diff --git a/sigc++/signal_base.h b/sigc++/signal_base.h
+index c821450..39f6b3f 100644
+--- a/sigc++/signal_base.h
++++ b/sigc++/signal_base.h
+@@ -21,6 +21,7 @@
+ #ifndef _SIGC_SIGNAL_BASE_H_
+ #define _SIGC_SIGNAL_BASE_H_
+ 
++#include <cstddef>
+ #include <list>
+ #include <sigc++/type_traits.h>
+ #include <sigc++/trackable.h>

@@ -1,0 +1,31 @@
+diff --git a/./libtool b/./libtool
+index 718f25f..108c9e7 100755
+--- a/./libtool
++++ b/./libtool
+@@ -6819,11 +6819,11 @@ striplib="strip --strip-unneeded"
+ 
+ # Dependencies to place before the objects being linked to create a
+ # shared library.
+-predep_objects="/usr/lib/gcc/x86_64-linux-gnu/11/../../../x86_64-linux-gnu/crti.o /usr/lib/gcc/x86_64-linux-gnu/11/crtbeginS.o"
++predep_objects=""
+ 
+ # Dependencies to place after the objects being linked to create a
+ # shared library.
+-postdep_objects="/usr/lib/gcc/x86_64-linux-gnu/11/crtendS.o /usr/lib/gcc/x86_64-linux-gnu/11/../../../x86_64-linux-gnu/crtn.o"
++postdep_objects=""
+ 
+ # Dependencies to place before the objects being linked to create a
+ # shared library.
+diff --git a/./sigc++/functors/slot.h b/./sigc++/functors/slot.h
+index 242e4df..fe1427c 100644
+--- a/./sigc++/functors/slot.h
++++ b/./sigc++/functors/slot.h
+@@ -86,7 +86,7 @@ struct slot_call0
+     {
+       typedef typed_slot_rep<T_functor> typed_slot;
+       typed_slot *typed_rep = static_cast<typed_slot*>(rep);
+-      return (typed_rep->functor_)();
++      return (void*) (typed_rep->functor_)();
+     }
+ 
+   /** Forms a function pointer from call_it().

@@ -1,0 +1,730 @@
+diff --git a/gtk2_ardour/wscript b/gtk2_ardour/wscript
+index 00edab5d24..2e30ad7163 100644
+--- a/gtk2_ardour/wscript
++++ b/gtk2_ardour/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options, TaskGen
+ import waflib.Logs as Logs, waflib.Utils as Utils
+diff --git a/headless/wscript b/headless/wscript
+index 2ad37d97ea..43062fea88 100644
+--- a/headless/wscript
++++ b/headless/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options, TaskGen
+ import waflib.Logs as Logs, waflib.Utils as Utils
+diff --git a/libs/appleutility/wscript b/libs/appleutility/wscript
+index 63a1a1a465..46b98690a6 100644
+--- a/libs/appleutility/wscript
++++ b/libs/appleutility/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/ardour/wscript b/libs/ardour/wscript
+index 0bfcc31b57..b1c450f547 100644
+--- a/libs/ardour/wscript
++++ b/libs/ardour/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options, Task, Tools
+ import os
+diff --git a/libs/ardouralsautil/wscript b/libs/ardouralsautil/wscript
+index 42c5e8678e..8d9b6c45e7 100644
+--- a/libs/ardouralsautil/wscript
++++ b/libs/ardouralsautil/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/audiographer/wscript b/libs/audiographer/wscript
+index 4efd1bda98..de0a0ecd85 100644
+--- a/libs/audiographer/wscript
++++ b/libs/audiographer/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ from waflib.extras import autowaf as autowaf
+ import os
+diff --git a/libs/auscan/wscript b/libs/auscan/wscript
+index 3a8c02d334..75becda582 100644
+--- a/libs/auscan/wscript
++++ b/libs/auscan/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import TaskGen
+ import os
+diff --git a/libs/backends/alsa/wscript b/libs/backends/alsa/wscript
+index 32cce76aac..1ee373d04b 100644
+--- a/libs/backends/alsa/wscript
++++ b/libs/backends/alsa/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ import sys
+diff --git a/libs/backends/coreaudio/wscript b/libs/backends/coreaudio/wscript
+index 941ede0e47..7bd75f4545 100644
+--- a/libs/backends/coreaudio/wscript
++++ b/libs/backends/coreaudio/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/backends/dummy/wscript b/libs/backends/dummy/wscript
+index 139f65c870..cdfb6c2ea5 100644
+--- a/libs/backends/dummy/wscript
++++ b/libs/backends/dummy/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ import sys
+diff --git a/libs/backends/jack/wscript b/libs/backends/jack/wscript
+index 88dad383d2..300baa4d9e 100644
+--- a/libs/backends/jack/wscript
++++ b/libs/backends/jack/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/backends/portaudio/wscript b/libs/backends/portaudio/wscript
+index 150b176d00..28b6539896 100644
+--- a/libs/backends/portaudio/wscript
++++ b/libs/backends/portaudio/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/backends/pulseaudio/wscript b/libs/backends/pulseaudio/wscript
+index 73ebd5a4d6..5836a675b2 100644
+--- a/libs/backends/pulseaudio/wscript
++++ b/libs/backends/pulseaudio/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ import sys
+diff --git a/libs/backends/wscript b/libs/backends/wscript
+index 833d831e27..711c778e6e 100644
+--- a/libs/backends/wscript
++++ b/libs/backends/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/canvas/wscript b/libs/canvas/wscript
+index 06185e42ba..cb27fdc326 100644
+--- a/libs/canvas/wscript
++++ b/libs/canvas/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ from waflib import TaskGen
+diff --git a/libs/clearlooks-newer/wscript b/libs/clearlooks-newer/wscript
+index 36637971b1..6a84fe61fc 100644
+--- a/libs/clearlooks-newer/wscript
++++ b/libs/clearlooks-newer/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ import sys
+diff --git a/libs/evoral/wscript b/libs/evoral/wscript
+index 7b690de0fc..72e420a11f 100644
+--- a/libs/evoral/wscript
++++ b/libs/evoral/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/fluidsynth/wscript b/libs/fluidsynth/wscript
+index f64c1f943e..85d887b32d 100644
+--- a/libs/fluidsynth/wscript
++++ b/libs/fluidsynth/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import TaskGen
+ import os
+diff --git a/libs/fst/wscript b/libs/fst/wscript
+index 5e1576da28..8543851c66 100644
+--- a/libs/fst/wscript
++++ b/libs/fst/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options, TaskGen
+ import waflib.Logs as Logs, waflib.Utils as Utils
+diff --git a/libs/gtkmm2ext/wscript b/libs/gtkmm2ext/wscript
+index 90bf1c8880..56a5d9d007 100644
+--- a/libs/gtkmm2ext/wscript
++++ b/libs/gtkmm2ext/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/hidapi/wscript b/libs/hidapi/wscript
+index 383289fbec..f42fb839ba 100644
+--- a/libs/hidapi/wscript
++++ b/libs/hidapi/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/libltc/wscript b/libs/libltc/wscript
+index fde888c426..d177d9d428 100644
+--- a/libs/libltc/wscript
++++ b/libs/libltc/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import TaskGen
+ import os
+diff --git a/libs/lua/wscript b/libs/lua/wscript
+index 7d1895a5bf..b88aac938f 100644
+--- a/libs/lua/wscript
++++ b/libs/lua/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import TaskGen
+ import os
+diff --git a/libs/midi++2/wscript b/libs/midi++2/wscript
+index a2d9f50137..ee70038d2f 100644
+--- a/libs/midi++2/wscript
++++ b/libs/midi++2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/panners/1in2out/wscript b/libs/panners/1in2out/wscript
+index d415c045a2..d79fd66e31 100644
+--- a/libs/panners/1in2out/wscript
++++ b/libs/panners/1in2out/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/panners/2in2out/wscript b/libs/panners/2in2out/wscript
+index ef3e6c8469..cba96ff3c2 100644
+--- a/libs/panners/2in2out/wscript
++++ b/libs/panners/2in2out/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/panners/stereobalance/wscript b/libs/panners/stereobalance/wscript
+index e29abfbd97..b3fbea6cab 100644
+--- a/libs/panners/stereobalance/wscript
++++ b/libs/panners/stereobalance/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/panners/vbap/wscript b/libs/panners/vbap/wscript
+index 6843112c94..bc4bed792b 100644
+--- a/libs/panners/vbap/wscript
++++ b/libs/panners/vbap/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/panners/wscript b/libs/panners/wscript
+index 9d30bab51f..cf55a1b2f5 100644
+--- a/libs/panners/wscript
++++ b/libs/panners/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/pbd/wscript b/libs/pbd/wscript
+index d57cd67d5b..4880cdaa9a 100644
+--- a/libs/pbd/wscript
++++ b/libs/pbd/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ from waflib import TaskGen
+diff --git a/libs/plugins/a-comp.lv2/wscript b/libs/plugins/a-comp.lv2/wscript
+index f2948a12c1..c257520bea 100644
+--- a/libs/plugins/a-comp.lv2/wscript
++++ b/libs/plugins/a-comp.lv2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ import re
+ import shutil
+diff --git a/libs/plugins/a-delay.lv2/wscript b/libs/plugins/a-delay.lv2/wscript
+index 1699ca72d7..9dde3646fc 100644
+--- a/libs/plugins/a-delay.lv2/wscript
++++ b/libs/plugins/a-delay.lv2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ import re
+ import shutil
+diff --git a/libs/plugins/a-eq.lv2/wscript b/libs/plugins/a-eq.lv2/wscript
+index cfb82d5ee2..49a33c48d7 100644
+--- a/libs/plugins/a-eq.lv2/wscript
++++ b/libs/plugins/a-eq.lv2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ import re
+ import shutil
+diff --git a/libs/plugins/a-exp.lv2/wscript b/libs/plugins/a-exp.lv2/wscript
+index fd42c9bd57..551dd8365b 100644
+--- a/libs/plugins/a-exp.lv2/wscript
++++ b/libs/plugins/a-exp.lv2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ import re
+ import shutil
+diff --git a/libs/plugins/a-fluidsynth.lv2/wscript b/libs/plugins/a-fluidsynth.lv2/wscript
+index eb8eeaa39c..ccdcde1b33 100644
+--- a/libs/plugins/a-fluidsynth.lv2/wscript
++++ b/libs/plugins/a-fluidsynth.lv2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ import re
+ import shutil
+diff --git a/libs/plugins/a-reverb.lv2/wscript b/libs/plugins/a-reverb.lv2/wscript
+index 60ca671c08..7178afa8c2 100644
+--- a/libs/plugins/a-reverb.lv2/wscript
++++ b/libs/plugins/a-reverb.lv2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ import re
+ import shutil
+diff --git a/libs/plugins/reasonablesynth.lv2/wscript b/libs/plugins/reasonablesynth.lv2/wscript
+index 7c382ae533..9d7316b380 100644
+--- a/libs/plugins/reasonablesynth.lv2/wscript
++++ b/libs/plugins/reasonablesynth.lv2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ import re
+ import shutil
+diff --git a/libs/ptformat/wscript b/libs/ptformat/wscript
+index 9ec3bd1a5a..376e2da0fd 100644
+--- a/libs/ptformat/wscript
++++ b/libs/ptformat/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/qm-dsp/wscript b/libs/qm-dsp/wscript
+index 775098e06b..06a9bc0bd8 100644
+--- a/libs/qm-dsp/wscript
++++ b/libs/qm-dsp/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/cc121/wscript b/libs/surfaces/cc121/wscript
+index 8195bb53a6..1009b68d94 100644
+--- a/libs/surfaces/cc121/wscript
++++ b/libs/surfaces/cc121/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/contourdesign/wscript b/libs/surfaces/contourdesign/wscript
+index 1f40dc4886..9fd1de72e5 100644
+--- a/libs/surfaces/contourdesign/wscript
++++ b/libs/surfaces/contourdesign/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/control_protocol/wscript b/libs/surfaces/control_protocol/wscript
+index 76dda1118e..fcdd72b206 100644
+--- a/libs/surfaces/control_protocol/wscript
++++ b/libs/surfaces/control_protocol/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/faderport/wscript b/libs/surfaces/faderport/wscript
+index f72a115e43..ee5a4eb1e5 100644
+--- a/libs/surfaces/faderport/wscript
++++ b/libs/surfaces/faderport/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/faderport8/wscript b/libs/surfaces/faderport8/wscript
+index 07e1eb381e..155ab14de4 100644
+--- a/libs/surfaces/faderport8/wscript
++++ b/libs/surfaces/faderport8/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/frontier/wscript b/libs/surfaces/frontier/wscript
+index c8613c0ba3..dc8f364fa9 100644
+--- a/libs/surfaces/frontier/wscript
++++ b/libs/surfaces/frontier/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/generic_midi/wscript b/libs/surfaces/generic_midi/wscript
+index 73e55c3fa4..86024b8379 100644
+--- a/libs/surfaces/generic_midi/wscript
++++ b/libs/surfaces/generic_midi/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/launch_control_xl/wscript b/libs/surfaces/launch_control_xl/wscript
+index e573101331..d810ae8be7 100644
+--- a/libs/surfaces/launch_control_xl/wscript
++++ b/libs/surfaces/launch_control_xl/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/mackie/wscript b/libs/surfaces/mackie/wscript
+index 2ed12fb10b..a066727b7f 100644
+--- a/libs/surfaces/mackie/wscript
++++ b/libs/surfaces/mackie/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/maschine2/wscript b/libs/surfaces/maschine2/wscript
+index 5432141b46..b8e06b98d3 100644
+--- a/libs/surfaces/maschine2/wscript
++++ b/libs/surfaces/maschine2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/osc/wscript b/libs/surfaces/osc/wscript
+index 447979a27d..3a3a8dbd31 100644
+--- a/libs/surfaces/osc/wscript
++++ b/libs/surfaces/osc/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/push2/wscript b/libs/surfaces/push2/wscript
+index b595b1702b..d6a269066c 100644
+--- a/libs/surfaces/push2/wscript
++++ b/libs/surfaces/push2/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/tranzport/wscript b/libs/surfaces/tranzport/wscript
+index 1af293ce93..da2bbb53c1 100644
+--- a/libs/surfaces/tranzport/wscript
++++ b/libs/surfaces/tranzport/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/us2400/wscript b/libs/surfaces/us2400/wscript
+index f8bddf8d58..a0db0c0b02 100644
+--- a/libs/surfaces/us2400/wscript
++++ b/libs/surfaces/us2400/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/websockets/wscript b/libs/surfaces/websockets/wscript
+index 9a62df3f0c..5adad72b73 100644
+--- a/libs/surfaces/websockets/wscript
++++ b/libs/surfaces/websockets/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/wiimote/wscript b/libs/surfaces/wiimote/wscript
+index d38296f37f..dccf13236a 100644
+--- a/libs/surfaces/wiimote/wscript
++++ b/libs/surfaces/wiimote/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/surfaces/wscript b/libs/surfaces/wscript
+index 061bba8099..0ba82633b7 100644
+--- a/libs/surfaces/wscript
++++ b/libs/surfaces/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ 
+diff --git a/libs/temporal/wscript b/libs/temporal/wscript
+index 83f566a458..f6d6c05ba4 100644
+--- a/libs/temporal/wscript
++++ b/libs/temporal/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/libs/vamp-plugins/wscript b/libs/vamp-plugins/wscript
+index f3e0024ee9..04c06277d1 100644
+--- a/libs/vamp-plugins/wscript
++++ b/libs/vamp-plugins/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/vamp-pyin/wscript b/libs/vamp-pyin/wscript
+index 5c9cb3014a..4ef18c2fbd 100644
+--- a/libs/vamp-pyin/wscript
++++ b/libs/vamp-pyin/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ import os
+ 
+diff --git a/libs/vfork/wscript b/libs/vfork/wscript
+index 8f4efbe0c7..7be9ff0f55 100644
+--- a/libs/vfork/wscript
++++ b/libs/vfork/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import TaskGen
+ import os
+diff --git a/libs/waveview/wscript b/libs/waveview/wscript
+index 996cf67c9a..9b42da5a5c 100644
+--- a/libs/waveview/wscript
++++ b/libs/waveview/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ from waflib import TaskGen
+diff --git a/libs/widgets/wscript b/libs/widgets/wscript
+index 1a1b24f5db..dffa66ad94 100644
+--- a/libs/widgets/wscript
++++ b/libs/widgets/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ from waflib import TaskGen
+diff --git a/libs/zita-convolver/wscript b/libs/zita-convolver/wscript
+index 3bde65575c..35b2a43cdc 100644
+--- a/libs/zita-convolver/wscript
++++ b/libs/zita-convolver/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ from waflib import TaskGen
+diff --git a/libs/zita-resampler/wscript b/libs/zita-resampler/wscript
+index 3d6027a0bc..59624cdcd7 100644
+--- a/libs/zita-resampler/wscript
++++ b/libs/zita-resampler/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ from waflib import TaskGen
+diff --git a/luasession/wscript b/luasession/wscript
+index 076e8d81ec..427ae582fe 100755
+--- a/luasession/wscript
++++ b/luasession/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options, TaskGen
+ import waflib.Logs as Logs, waflib.Utils as Utils
+diff --git a/session_utils/wscript b/session_utils/wscript
+index 2c2d158661..e6a7b8c93e 100644
+--- a/session_utils/wscript
++++ b/session_utils/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options, TaskGen
+ import waflib.Logs as Logs, waflib.Utils as Utils
+diff --git a/share/web_surfaces/wscript b/share/web_surfaces/wscript
+index d549abea38..b36d430771 100644
+--- a/share/web_surfaces/wscript
++++ b/share/web_surfaces/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ import os
+ 
+ def configure(conf):
+diff --git a/tools/autowaf.py b/tools/autowaf.py
+index 375dc5909a..72606e3cb3 100644
+--- a/tools/autowaf.py
++++ b/tools/autowaf.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ # -*- coding: utf-8 -*-
+ #
+ # Autowaf, useful waf utilities with support for recursive projects
+diff --git a/tools/gccabicheck/wscript b/tools/gccabicheck/wscript
+index 1b89cf57dd..48e669cfe8 100644
+--- a/tools/gccabicheck/wscript
++++ b/tools/gccabicheck/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/tools/misc.py b/tools/misc.py
+index b82cdb63ba..7998408455 100644
+--- a/tools/misc.py
++++ b/tools/misc.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ # encoding: utf-8
+ # Thomas Nagy, 2006-2010 (ita)
+ 
+diff --git a/tools/sanity_check/wscript b/tools/sanity_check/wscript
+index 000753e18b..0c40a3cb83 100644
+--- a/tools/sanity_check/wscript
++++ b/tools/sanity_check/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
+diff --git a/waf b/waf
+index da7d3440ed..130c0b48a3 100755
+--- a/waf
++++ b/waf
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ # encoding: latin-1
+ # Thomas Nagy, 2005-2018
+ #
+diff --git a/wscript b/wscript
+index 3b22d1ce76..1ca9484beb 100644
+--- a/wscript
++++ b/wscript
+@@ -1,4 +1,4 @@
+-#!/usr/bin/env python
++#!/usr/bin/env python3
+ from waflib.extras import autowaf as autowaf
+ from waflib import Options
+ import os
