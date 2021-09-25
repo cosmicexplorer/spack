@@ -38,6 +38,7 @@ class Aubio(WafPackage):
     depends_on('python+pythoncmd', type='build')
     depends_on('gawk', type='build')
     depends_on('bash', type='build')
+    depends_on('jack2')
 
     # The default script to download waf by verifying the gpg key doesn't appear
     # to work. This version checks it against the checksum 'c74055d7452540ad66c12d955c09f62a9fde0e23b0ab3c43984dc879b4bb51f4'.

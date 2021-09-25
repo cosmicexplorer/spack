@@ -12,6 +12,7 @@ class Glibmm(AutotoolsPackage):
     homepage = "https://developer.gnome.org/glib/"
     url      = "https://ftp.gnome.org/pub/GNOME/sources/glibmm/2.19/glibmm-2.19.3.tar.gz"
 
+    version('2.68.1', sha256='6664e27c9a9cca81c29e35687f49f2e0d173a2fc9e98c3428311f707db532f8c')
     version('2.32.0', sha256='e1806f884c6e9f904ee2af0d39dd8d4de3f91a039f897f54333b0890de06f94b')
     version('2.19.3', sha256='23958368535c19188b1241c4615dcf1f35e80e0922a04236bb9247dcd8fe0a2b')
     version('2.16.0', sha256='99795b9c6e58e490df740a113408092bf47a928427cbf178d77c35adcb6a57a3')
