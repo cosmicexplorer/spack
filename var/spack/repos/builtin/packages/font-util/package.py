@@ -17,6 +17,7 @@ class FontUtil(AutotoolsPackage, XorgPackage):
 
     depends_on('autoconf', type='build')
     depends_on('automake', type='build')
+    depends_on('gawk', type='build')
 
     depends_on('pkgconfig', type='build')
     depends_on('util-macros', type='build')
@@ -24,6 +25,8 @@ class FontUtil(AutotoolsPackage, XorgPackage):
     depends_on('bdftopcf', type='build')
     depends_on('mkfontscale', type='build')
     depends_on('mkfontdir', type='build')
+
+    executables = ['bdftruncate', 'ucs2any']
 
     font_baseurl = 'https://www.x.org/archive/individual/font/'
     default_fonts = []

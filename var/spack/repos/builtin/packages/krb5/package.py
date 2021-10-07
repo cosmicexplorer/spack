@@ -26,6 +26,7 @@ class Krb5(AutotoolsPackage):
 
     depends_on('bison', type='build')
     depends_on('openssl@:1')
+    depends_on('gettext')
 
     variant(
         'shared', default=True,
@@ -59,7 +60,10 @@ class Krb5(AutotoolsPackage):
             string=True)
 
     def configure_args(self):
-        args = ['--without-system-verto']
+        args = [
+            'LIBS=-lintl',
+            '--without-system-verto',
+        ]
 
         if '~shared' in self.spec:
             args.append('--enable-static')

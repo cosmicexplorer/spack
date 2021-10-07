@@ -35,6 +35,18 @@ class Emacs(AutotoolsPackage, GNUMirrorPackage):
     )
     variant('tls', default=False, description="Build Emacs with gnutls")
     variant('native', default=False, description="enable native compilation of elisp")
+    variant('profiling', default=False,
+            description="build emacs with low-level gprof profiling support")
+    variant('deterministic-build', default=False,
+            description="Make the build more deterministic by omitting names, time stamps, etc. from the output.")  # noqa: E501
+    variant('lto', default=False,
+            description="build with link-time optimization (experimental)")
+    variant('mailutils', default=False,
+            description="build with GNU mailutils")
+    variant('krb5', default=False,
+            description="support Kerberos version 5 authenticated POP")
+    variant('json', default=False,
+            description="use the native json library for json parsing")
 
     depends_on('pkgconfig', type='build')
 
@@ -57,6 +69,12 @@ class Emacs(AutotoolsPackage, GNUMirrorPackage):
     depends_on('libtool', type='build', when="@master:")
     depends_on('texinfo', type='build', when="@master:")
     depends_on('gcc@11: +strip languages=jit', when="+native")
+
+    depends_on('mailutils', when='+mailutils')
+    depends_on('krb5', when='+krb5')
+    depends_on('gmp')
+
+    depends_on('libjson', when='+json')
 
     conflicts('@:26.3', when='platform=darwin os=catalina')
     conflicts('+native', when='@:27', msg="native compilation require @master")
@@ -92,6 +110,17 @@ class Emacs(AutotoolsPackage, GNUMirrorPackage):
             args.append('--with-gnutls')
         else:
             args.append('--without-gnutls')
+
+        if '+profiling' in spec:
+            args.append('--enable-profiling')
+        if '+deterministic-build' in spec:
+            args.append('--disable-build-details')
+        if '+lto' in spec:
+            args.append('--enable-link-time-optimization')
+        if '+mailutils' in spec:
+            args.append('--with-mailutils')
+        if '+krb5' in spec:
+            args.append('--with-kerberos5')
 
         return args
 
