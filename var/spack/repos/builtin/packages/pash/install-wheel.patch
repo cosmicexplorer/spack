@@ -1,0 +1,17 @@
+diff --git a/scripts/setup-pash.sh b/scripts/setup-pash.sh
+index bca29182..9711fe0e 100755
+--- a/scripts/setup-pash.sh
++++ b/scripts/setup-pash.sh
+@@ -82,6 +82,7 @@ cd ../
+ echo "Installing python dependencies..."
+ python3 -m pip install jsonpickle --root $PYTHON_PKG_DIR --force-reinstall #&> $LOG_DIR/pip_install_jsonpickle.log
+ python3 -m pip install pexpect --root $PYTHON_PKG_DIR --force-reinstall #&> $LOG_DIR/pip_install_pexpect.log
++python3 -m pip install wheel
+ python3 -m pip install numpy #&> $LOG_DIR/pip_install_numpy.log
+ python3 -m pip install matplotlib #&> $LOG_DIR/pip_install_matplotlib.log
+ # clean the python packages
+@@ -96,4 +97,3 @@ $PASH_TOP/evaluation/tests/input/setup.sh
+ echo " * * * "
+ echo "Do not forget to export PASH_TOP before using pash: \`export PASH_TOP=$PASH_TOP\`"
+ echo '(optionally, you can update PATH to include it: `export PATH=$PATH:$PASH_TOP`)'
+-

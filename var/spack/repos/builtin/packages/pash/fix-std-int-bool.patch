@@ -1,0 +1,27 @@
+diff --git a/runtime/r_split.h b/runtime/r_split.h
+index 43f53e11..7b5f9f9e 100644
+--- a/runtime/r_split.h
++++ b/runtime/r_split.h
+@@ -1,4 +1,6 @@
+ #include <stdio.h>
++#include <stdbool.h>
++#include <stdint.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/stat.h>
+@@ -14,8 +16,6 @@
+ #define PRINTDBG(fmt, ...)
+ #endif
+ 
+-typedef __uint64_t uint64_t;
+-typedef int8_t bool;
+ #define MAX_LINE_LENGTH 1e6
+ 
+ #define LOC __FILE__ // TODO expand
+@@ -115,4 +115,4 @@ void writeHeader(FILE *destFile, int64_t id, size_t blockSize, bool isLast)
+ {
+   block_header header = {id, blockSize, isLast};
+   safeWrite((char *)&header, sizeof(block_header), 1, destFile);
+-}
+\ No newline at end of file
++}
