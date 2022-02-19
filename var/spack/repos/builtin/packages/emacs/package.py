@@ -15,6 +15,8 @@ class Emacs(AutotoolsPackage, GNUMirrorPackage):
     git      = "git://git.savannah.gnu.org/emacs.git"
     gnu_mirror_path = "emacs/emacs-24.5.tar.gz"
 
+    maintainers = ['cosmicexplorer']
+
     version('master', branch='master')
     version('27.2', sha256='80ff6118fb730a6d8c704dccd6915a6c0e0a166ab1daeef9fe68afa9073ddb73')
     version('27.1', sha256='ffbfa61dc951b92cf31ebe3efc86c5a9d4411a1222b8a4ae6716cfd0e2a584db')

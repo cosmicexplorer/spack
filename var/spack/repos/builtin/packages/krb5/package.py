@@ -14,6 +14,8 @@ class Krb5(AutotoolsPackage):
     list_url   = "https://kerberos.org/dist/krb5/"
     list_depth = 1
 
+    maintainers = ['cosmicexplorer']
+
     version('1.19.2', sha256='10453fee4e3a8f8ce6129059e5c050b8a65dab1c257df68b99b3112eaa0cdf6a')
     version('1.18.2', sha256='c6e4c9ec1a98141c3f5d66ddf1a135549050c9fab4e9a4620ee9b22085873ae0')
     version('1.18.1', sha256='02a4e700f10936f937cd1a4c303cab8687a11abecc6107bd4b706b9329cd5400')
