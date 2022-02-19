@@ -844,8 +844,9 @@ class GitRef(object):
         # (2) Ensure no mutually exclusive kwargs are provided.
         num_specified = len(list(filter(None, [commit, tag, branch])))
         # (3) If no explicit git ref arguments are provided, assume that the version
-        # string itself is to be used as the branch name.
-        if (num_specified == 0) and version_name is not None:
+        # string itself is to be used as the branch name. Ensure the version_name is
+        # not blank.
+        if (num_specified == 0) and version_name:
             return cls.Branch(version_name)
         # (4) If we are given a tag or a branch with a commit sha, note that by using
         # a special constructor.
@@ -858,10 +859,10 @@ class GitRef(object):
         # arguments, or no ref arguments at all, so error.
         if num_specified != 1:
             raise InvalidGitRef(dedent("""\
-            Exactly one of 'tag' or 'branch' must be specified for a git url.
-            A 'commit' hash prefix may be provided on its own or in addition to either
+            A 'commit' hash prefix may be provided on its own, or in addition to either
             'tag' or branch' to ensure that the 'commit' hash prefix matches the tag or
-            branch's actual hash after fetching.
+            branch's actual hash after fetching. 'tag' and 'branch' are
+            mutually exclusive.
             Given:
             commit={0}
             tag={1}
@@ -1119,7 +1120,7 @@ class ConfiguredGit(object):
         This method being `@memoized` means that with the current implementation of
         `Executable.__eq__`, any two `Executable` instances pointing to the same
         executable file path will return a cached result from this method, which will
-        avoid traversing the filesystem.
+        avoid executing the git process to obtain the version again.
         """
         version = cls._get_git_version(git)
 

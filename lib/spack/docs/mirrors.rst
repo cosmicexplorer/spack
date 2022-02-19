@@ -288,7 +288,7 @@ following assumptions:
 
 #. A branch is assumed to be **mutable**, which means spack will attempt to
    re-fetch the branch every time the user attempts to fetch the package (or
-   perform another command like ``spack install`` which fetches the package). If
+   perform another command like ``spack install`` that fetches the package). If
    spack does not have Internet access or the fetch fails for any other reason,
    or separately if there was no new data to fetch, the previous cache entry will
    be reused.
