@@ -61,7 +61,7 @@ class Gtkplus(MesonPackage):
                     '', 'configure', string=True)
 
         # https://gitlab.gnome.org/GNOME/gtk/-/issues/3776
-        if self.spec.satisfies('@3:%gcc@11:'):
+        if self.spec.satisfies('@3:%gcc@10:'):
             filter_file("    '-Werror=array-bounds',",
                         '', 'meson.build', string=True)
 
