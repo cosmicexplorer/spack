@@ -4896,30 +4896,30 @@ class SpecLexer(spack.parse.Lexer):
                     "BEGIN_PHASE",
                     [
                         # '^': dependency, or "AND":
-                        (r"\^", DEP),
+                        (re.escape("^"), DEP),
                         # '@': begin a Version, VersionRange, or VersionList:
-                        (r"\@", AT),
+                        (re.escape("\@"), AT),
                         # VersionRange syntax:
-                        (r'\!\:\!', LT_GT_COLON),
-                        (r'\:\!', LT_COLON),
-                        (r'\!\:', GT_COLON),
-                        (r'\:', COLON),
+                        (re.escape("!:!"), LT_GT_COLON),
+                        (re.escape(":!"), LT_COLON),
+                        (re.escape("!:"), GT_COLON),
+                        (re.escape(":"), COLON),
                         # VersionList syntax:
-                        (r"\,", COMMA),
+                        (re.escape(","), COMMA),
                         # variant syntax:
-                        (r"\+", ON),
-                        (r"\-", OFF),
-                        (r"\~", OFF),
+                        (re.escape("+"), ON),
+                        (re.escape("-"), OFF),
+                        (re.escape("~"), OFF),
                         # Compiler dependency syntax:
-                        (r"\%", PCT),
+                        (re.escape("%"), PCT),
                         # This is *not* used in version string parsing.
-                        (r"\=", EQ),
+                        (re.escape("="), EQ),
                         # Filenames match before identifiers, so no initial filename
                         # component is parsed as a spec (e.g., in subdir/spec.yaml)
                         (filename_reg, FILE),
                         # Hash match after filename. No valid filename can be a hash
                         # (files end w/.yaml), but a hash can match a filename prefix.
-                        (r"/", HASH),
+                        (re.escape("/"), HASH),
                         # Identifiers match after filenames and hashes.
                         (spec_id_re, ID),
                         # Gobble up all remaining whitespace between tokens.
@@ -5219,6 +5219,7 @@ class SpecParser(spack.parse.Parser):
     def version(self):
         start = None
         end = None
+        op = None
         if self.accept(ID):
             start = vn.VersionEndpoint.left(self.token.value)
 
