@@ -19,8 +19,8 @@ class Chai(CachedCMakePackage, CudaPackage, ROCmPackage):
 
     maintainers = ['davidbeckingsale']
 
-    version('develop', branch='develop', submodules=True)
-    version('main', branch='main', submodules=True)
+    version('develop', submodules=True)
+    version('main', submodules=True)
     version('2.4.0', tag='v2.4.0', submodules=True)
     version('2.3.0', tag='v2.3.0', submodules=True)
     version('2.2.2', tag='v2.2.2', submodules=True)

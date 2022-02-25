@@ -263,6 +263,7 @@ def test_external_root(external_style_root):
 @pytest.mark.skipif(not which("flake8"), reason="flake8 is not installed.")
 def test_style(flake8_package, tmpdir):
     root_relative = os.path.relpath(flake8_package, spack.paths.prefix)
+    style_args = ('--no-mypy', '--no-isort')
 
     # use a working directory to test cwd-relative paths, as tests run in
     # the spack prefix by default
@@ -270,23 +271,26 @@ def test_style(flake8_package, tmpdir):
         relative = os.path.relpath(flake8_package)
 
         # no args
-        output = style()
+        output = style(*style_args)
         assert relative in output
         assert "spack style checks were clean" in output
 
         # one specific arg
-        output = style(flake8_package)
+        flake8_args = style_args + (flake8_package,)
+        output = style(*flake8_args)
         assert relative in output
         assert "spack style checks were clean" in output
 
         # specific file that isn't changed
-        output = style(__file__)
+        specific_file_args = style_args + (__file__,)
+        output = style(*specific_file_args)
         assert relative not in output
         assert __file__ in output
         assert "spack style checks were clean" in output
 
     # root-relative paths
-    output = style("--root-relative", flake8_package)
+    root_relative_args = style_args + ('--root-relative', flake8_package)
+    output = style(*root_relative_args)
     assert root_relative in output
     assert "spack style checks were clean" in output
 
@@ -295,17 +299,20 @@ def test_style(flake8_package, tmpdir):
 @pytest.mark.skipif(not which("flake8"), reason="flake8 is not installed.")
 def test_style_with_errors(flake8_package_with_errors):
     root_relative = os.path.relpath(flake8_package_with_errors, spack.paths.prefix)
-    output = style("--root-relative", flake8_package_with_errors, fail_on_error=False)
+    output = style("--no-mypy", "--no-isort",
+                   "--root-relative", flake8_package_with_errors,
+                   fail_on_error=False)
     assert root_relative in output
     assert style.returncode != 0
     assert "spack style found errors" in output
 
 
 @skip_old_python
-@pytest.mark.skipif(not which("flake8"), reason="flake8 is not installed.")
 @pytest.mark.skipif(not which("black"), reason="black is not installed.")
 def test_style_with_black(flake8_package_with_errors):
-    output = style("--black", flake8_package_with_errors, fail_on_error=False)
+    output = style("--black", "--no-mypy", "--no-isort",
+                   flake8_package_with_errors,
+                   fail_on_error=False)
     assert "black found errors" in output
     assert style.returncode != 0
     assert "spack style found errors" in output

@@ -88,14 +88,58 @@ class HipRocclr(CMakePackage):
             when='@{0}'.format(d_version)
         )
 
-    resource(
-        name='opencl-on-vdi',
-        git='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime.git',
-        destination='',
-        placement='opencl-on-vdi',
-        branch='main',
-        when='@master'
-    )
+    resource(name='opencl-on-vdi',
+             url='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime/archive/rocm-3.8.0.tar.gz',
+             sha256='7f75dd1abf3d771d554b0e7b0a7d915ab5f11a74962c92b013ee044a23c1270a',
+             expand=True,
+             destination='',
+             placement='opencl-on-vdi',
+             when='@3.8.0')
+
+    resource(name='opencl-on-vdi',
+             url='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime/archive/rocm-3.9.0.tar.gz',
+             sha256='286ff64304905384ce524cd8794c28aee216befd6c9267d4187a12e5a21e2daf',
+             expand=True,
+             destination='',
+             placement='opencl-on-vdi',
+             when='@3.9.0')
+
+    resource(name='opencl-on-vdi',
+             url='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime/archive/rocm-3.10.0.tar.gz',
+             sha256='3aa9dc5a5f570320b04b35ee129ce9ff21062d2770df934c6c307913f975e93d',
+             expand=True,
+             destination='',
+             placement='opencl-on-vdi',
+             when='@3.10.0')
+
+    resource(name='opencl-on-vdi',
+             url='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime/archive/rocm-4.0.0.tar.gz',
+             sha256='d43ea5898c6b9e730b5efabe8367cc136a9260afeac5d0fe85b481d625dd7df1',
+             expand=True,
+             destination='',
+             placement='opencl-on-vdi',
+             when='@4.0.0')
+
+    resource(name='opencl-on-vdi',
+             url='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime/archive/rocm-4.1.0.tar.gz',
+             sha256='0729e6c2adf1e3cf649dc6e679f9cb936f4f423f4954ad9852857c0a53ef799c',
+             expand=True,
+             destination='',
+             placement='opencl-on-vdi',
+             when='@4.1.0')
+    resource(name='opencl-on-vdi',
+             url='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime/archive/rocm-4.2.0.tar.gz',
+             sha256='18133451948a83055ca5ebfb5ba1bd536ed0bcb611df98829f1251a98a38f730',
+             expand=True,
+             destination='',
+             placement='opencl-on-vdi',
+             when='@4.2.0')
+    resource(name='opencl-on-vdi',
+             git='https://github.com/RadeonOpenCompute/ROCm-OpenCL-Runtime.git',
+             branch='master',
+             destination='',
+             placement='opencl-on-vdi',
+             when='@master')
 
     @property
     def install_targets(self):

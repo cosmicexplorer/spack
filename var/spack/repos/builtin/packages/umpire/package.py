@@ -21,8 +21,8 @@ class Umpire(CachedCMakePackage, CudaPackage, ROCmPackage):
 
     maintainers = ['davidbeckingsale']
 
-    version('develop', branch='develop', submodules=True)
-    version('main', branch='main', submodules=True)
+    version('develop', submodules=True)
+    version('main', submodules=True)
     version('6.0.0', tag='v6.0.0', submodules=True)
     version('5.0.1', tag='v5.0.1', submodules=True)
     version('5.0.0', tag='v5.0.0', submodules=True)

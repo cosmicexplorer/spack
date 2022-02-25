@@ -29,11 +29,12 @@ import os
 import re
 from bisect import bisect_left
 from functools import wraps
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple  # novm
 
 from six import string_types
 
+import llnl.util.lang as lang
 import llnl.util.tty as tty
-from llnl.util.filesystem import mkdirp, working_dir
 
 import spack.caches
 import spack.error
@@ -41,6 +42,10 @@ import spack.paths
 import spack.util.executable
 import spack.util.spack_json as sjson
 from spack.util.spack_yaml import syaml_dict
+
+if TYPE_CHECKING:
+    from spack.fetch_strategy import GitCommit
+    from spack.package import PackageBase
 
 __all__ = ['Version', 'VersionRange', 'VersionList', 'ver']
 
@@ -188,6 +193,20 @@ class Version(object):
             int(m[0]) if m[0] else VersionStrComponent(m[1]) for m in segments
         )
         self.separators = tuple(m[2] for m in segments)
+
+    _v_prefix = re.compile(r'^v')
+
+    def matches_regardless_of_v_prefix(self, other):
+        # type: (Version) -> bool
+        return (
+            self._v_prefix.sub('', self.string) == self._v_prefix.sub('', other.string))
+
+    def parse_semver(self):
+        # type: () -> Optional[Version]
+        match = SEMVER_REGEX.match(self.string)
+        if match:
+            return Version(match.groupdict()['semver'])
+        return None
 
     def _cmp(self, other_lookups=None):
         commit_lookup = self.commit_lookup or other_lookups
@@ -992,6 +1011,10 @@ class VersionLookupError(VersionError):
     """Raised for errors looking up git commits as versions."""
 
 
+if TYPE_CHECKING:
+    _CommitLookupResult = Tuple[Optional[str], Optional[int]]
+
+
 class CommitLookup(object):
     """An object for cached lookups of git commits
 
@@ -1000,14 +1023,15 @@ class CommitLookup(object):
     Version.is_commit returns True to allow for comparisons between git commits
     and versions as represented by tags in the git repository.
     """
+    pkg = None                  # type: PackageBase
+    data = None                 # type: Dict[str, _CommitLookupResult]
+    git_repo_path = None        # type: str
+    versions = None             # type: List[Version]
+
     def __init__(self, pkg):
         self.pkg = pkg
-
-        # We require the full git repository history
-        import spack.fetch_strategy  # break cycle
-        fetcher = spack.fetch_strategy.GitFetchStrategy(git=pkg.git)
-        fetcher.get_full_repo = True
-        self.fetcher = fetcher
+        self.git_repo_path = self.pkg.git  # type: ignore[attr-defined]
+        self.versions = self.pkg.versions  # type: ignore[attr-defined]
 
         self.data = {}
 
@@ -1019,22 +1043,33 @@ class CommitLookup(object):
         spack.caches.misc_cache.init_entry(self.cache_key)
         self.cache_path = spack.caches.misc_cache.cache_path(self.cache_key)
 
+    @lang.memoized
+    def fetcher(self, commit):
+        # type: (str) -> spack.fetch_strategy.GitFetchStrategy
+        """We require the full git repository history."""
+        import spack.fetch_strategy  # break cycle
+        fetcher = spack.fetch_strategy.GitFetchStrategy(
+            git=self.git_repo_path, commit=commit, get_full_repo=True)
+        return fetcher
+
     @property
     def repository_uri(self):
+        # type: () -> str
         """
         Identifier for git repos used within the repo and metadata caches.
 
         """
         try:
             components = [str(c).lstrip('/')
-                          for c in spack.util.url.parse_git_url(self.pkg.git)
+                          for c in spack.util.url.parse_git_url(self.git_repo_path)
                           if c]
             return os.path.join(*components)
         except ValueError:
             # If it's not a git url, it's a local path
-            return os.path.abspath(self.pkg.git)
+            return os.path.abspath(self.git_repo_path)
 
     def save(self):
+        # type: () -> None
         """
         Save the data to file
         """
@@ -1042,6 +1077,7 @@ class CommitLookup(object):
             sjson.dump(self.data, new)
 
     def load_data(self):
+        # type: () -> None
         """
         Load data if the path already exists.
         """
@@ -1050,6 +1086,7 @@ class CommitLookup(object):
                 self.data = sjson.load(cache_file)
 
     def get(self, commit):
+        # type: (str) -> _CommitLookupResult
         if not self.data:
             self.load_data()
 
@@ -1060,90 +1097,62 @@ class CommitLookup(object):
         return self.data[commit]
 
     def lookup_commit(self, commit):
+        # type: (str) -> _CommitLookupResult
         """Lookup the previous version and distance for a given commit.
 
-        We use git to compare the known versions from package to the git tags,
+        We use git to compare the known versions from the package to the git tags,
         as well as any git tags that are SEMVER versions, and find the latest
         known version prior to the commit, as well as the distance from that version
         to the commit in the git repo. Those values are used to compare Version objects.
         """
-        dest = os.path.join(spack.paths.user_repos_cache_path, self.repository_uri)
-        if dest.endswith('.git'):
-            dest = dest[:-4]
+        fetcher = self.fetcher(commit)
+        from spack.stage import Stage
+        with Stage(fetcher):
+            assert fetcher.fetch()
+            git_repo = fetcher.canonical_git_repo
 
-        # prepare a cache for the repository
-        dest_parent = os.path.dirname(dest)
-        if not os.path.exists(dest_parent):
-            mkdirp(dest_parent)
+            # Lookup commit info.
+            initial_ref = spack.fetch_strategy.GitRef.Commit(commit)
+            # Ensure commit is an object known to git.
+            expanded_ref = git_repo.expand_commit_hash(initial_ref)
+            if expanded_ref is None:
+                raise spack.fetch_strategy.InvalidGitRef(
+                    "initial reference '{0}' was not found in repo {1}"
+                    .format(initial_ref, git_repo))
 
-        # Only clone if we don't have it!
-        if not os.path.exists(dest):
-            self.fetcher.clone(dest, bare=True)
-
-        # Lookup commit info
-        with working_dir(dest):
-            self.fetcher.git("fetch", '--tags')
-
-            # Ensure commit is an object known to git
-            # Note the brackets are literals, the commit replaces the format string
-            # This will raise a ProcessError if the commit does not exist
-            # We may later design a custom error to re-raise
-            self.fetcher.git('cat-file', '-e', '%s^{commit}' % commit)
-
-            # List tags (refs) by date, so last reference of a tag is newest
-            tag_info = self.fetcher.git(
-                "for-each-ref", "--sort=creatordate", "--format",
-                "%(objectname) %(refname)", "refs/tags", output=str).split('\n')
-
-            # Lookup of commits to spack versions
-            commit_to_version = {}
-
-            for entry in tag_info:
-                if not entry:
-                    continue
-                tag_commit, tag = entry.split()
-                tag = tag.replace('refs/tags/', '', 1)
-
-                # For each tag, try to match to a version
-                for v in [v.string for v in self.pkg.versions]:
-                    if v == tag or 'v' + v == tag:
+            # Lookup of commits to spack versions.
+            commit_to_version = {}  # type: Dict[GitCommit, Version]
+            for tag_commit, tag in git_repo.tags_for():
+                # For each tag, try to match to a version.
+                for v in self.versions:
+                    if v.matches_regardless_of_v_prefix(tag.version):
                         commit_to_version[tag_commit] = v
                         break
                 else:
-                    # try to parse tag to copare versions spack does not know
-                    match = SEMVER_REGEX.match(tag)
-                    if match:
-                        semver = match.groupdict()['semver']
-                        commit_to_version[tag_commit] = semver
+                    # Try to parse tag to compare versions spack does not know.
+                    maybe_semver = tag.version.parse_semver()
+                    if maybe_semver:
+                        commit_to_version[tag_commit] = maybe_semver
 
-            ancestor_commits = []
-            for tag_commit in commit_to_version:
-                self.fetcher.git(
-                    'merge-base', '--is-ancestor', tag_commit, commit,
-                    ignore_errors=[1])
-                if self.fetcher.git.returncode == 0:
-                    distance = self.fetcher.git(
-                        'rev-list', '%s..%s' % (tag_commit, commit), '--count',
-                        output=str, error=str).strip()
-                    ancestor_commits.append((tag_commit, int(distance)))
+            ancestor_commits = []  # type: List[Tuple[GitCommit, int]]
+            for tag_commit, v in commit_to_version.items():
+                distance = git_repo.calculate_ancestry_distance(tag_commit, initial_ref)
+                if distance is not None:
+                    ancestor_commits.append((tag_commit, distance))
 
-            # Get nearest ancestor that is a known version
-            ancestor_commits.sort(key=lambda x: x[1])
+            # Get nearest ancestor that is a known version.
+            prev_version = None  # type: Optional[str]
             if ancestor_commits:
+                ancestor_commits.sort(key=lambda x: x[1])
                 prev_version_commit, distance = ancestor_commits[0]
-                prev_version = commit_to_version[prev_version_commit]
+                prev_version = commit_to_version[prev_version_commit].string
             else:
-                # Get list of all commits, this is in reverse order
-                # We use this to get the first commit below
-                commit_info = self.fetcher.git("log", "--all", "--pretty=format:%H",
-                                               output=str)
-                commits = [c for c in commit_info.split('\n') if c]
+                # Get list of all commit in reverse order. We then use this to get the
+                # first commit.
+                commits = git_repo.commits_for()
 
-                # No previous version and distance from first commit
-                prev_version = None
-                distance = int(self.fetcher.git(
-                    'rev-list', '%s..%s' % (commits[-1], commit), '--count',
-                    output=str, error=str
-                ).strip())
+                # No previous version, so calculate distance from the first commit.
+                distance = git_repo.calculate_ancestry_distance(
+                    commits[-1], initial_ref)
 
-        return prev_version, distance
+            return prev_version, distance
