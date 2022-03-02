@@ -3,14 +3,15 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import abc
 import itertools
 import re
 import shlex
 import sys
 from textwrap import dedent
-from typing import Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, Iterable, Iterator, List, Tuple
 
-from six import string_types
+import six
 
 import spack.error
 
@@ -19,6 +20,7 @@ class Token(object):
     """Represents tokens; generated from input by lexer and fed to parse()."""
 
     def __init__(self, type, value='', start=0, end=0):
+        # type: (Any, str, int, int) -> None
         self.type = type
         self.value = value
         self.start = start
@@ -31,6 +33,7 @@ class Token(object):
         return "<%d: '%s'>" % (self.type, self.value)
 
     def is_a(self, type):
+        # type: (Any) -> bool
         return self.type == type
 
     def __eq__(self, other):
@@ -46,20 +49,22 @@ class Lexer(object):
 
     def __init__(self, lexicon_and_mode_switches):
         # type: (List[Tuple[str, _Lexicon, _Switches]]) -> None
-        self.scanners = {}      # type: Dict[str, _Lexicon]
-        self.switchbook = {}    # type: Dict[str, _Switches]
+        self.scanners = {}    # type: Dict[str, re.Scanner] # type: ignore[name-defined]
+        self.switchbook = {}  # type: Dict[str, _Switches]
         self.mode = lexicon_and_mode_switches[0][0]
         for mode_name, lexicon, mode_switches_dict in lexicon_and_mode_switches:
             self.scanners[mode_name] = re.Scanner(lexicon)  # type: ignore[attr-defined]
             self.switchbook[mode_name] = mode_switches_dict
 
     def token(self, type, value=''):
+        # type: (Any, str) -> Token
         cur_scanner = self.scanners[self.mode]
         return Token(type, value,
                      cur_scanner.match.start(0),
                      cur_scanner.match.end(0))
 
     def lex_word(self, word):
+        # type: (str) -> Iterable[Token]
         scanner = self.scanners[self.mode]
         mode_switches_dict = self.switchbook[self.mode]
 
@@ -83,13 +88,13 @@ class Lexer(object):
         return tokens
 
     def lex(self, text):
-        lexed = []
+        # type: (str) -> Iterator[Token]
         for word in text:
-            tokens = self.lex_word(word)
-            lexed.extend(tokens)
-        return lexed
+            for tok in self.lex_word(word):
+                yield tok
 
 
+@six.add_metaclass(abc.ABCMeta)
 class Parser(object):
     """Base class for simple recursive descent parsers."""
 
@@ -144,10 +149,14 @@ class Parser(object):
             sys.exit(1)
 
     def setup(self, text):
-        if isinstance(text, string_types):
+        if isinstance(text, six.string_types):
             text = shlex.split(str(text))
         self.text = text
-        self.push_tokens(self.lexer.lex(text))
+        self.push_tokens(list(self.lexer.lex(text)))
+
+    @abc.abstractmethod
+    def do_parse(self):
+        pass
 
     def parse(self, text):
         self.setup(text)
