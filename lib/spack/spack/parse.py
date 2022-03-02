@@ -114,8 +114,10 @@ class Parser(object):
 
     def push_tokens(self, iterable):
         """Adds all tokens in some iterable to the token stream."""
-        self.tokens = itertools.chain(
-            iter(iterable), iter([self.next]), self.tokens)
+        self._push_token_stream(iter(iterable))
+
+    def _push_token_stream(self, stream):
+        self.tokens = itertools.chain(stream, iter([self.next]), self.tokens)
         self.gettok()
 
     def accept(self, id):
@@ -152,7 +154,8 @@ class Parser(object):
         if isinstance(text, six.string_types):
             text = shlex.split(str(text))
         self.text = text
-        self.push_tokens(list(self.lexer.lex(text)))
+
+        self._push_token_stream(self.lexer.lex(text))
 
     @abc.abstractmethod
     def do_parse(self):
