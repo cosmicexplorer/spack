@@ -36,10 +36,11 @@ class Gsl(AutotoolsPackage, GNUMirrorPackage):
 
     conflicts("+external-cblas", when="@:2.2")
 
-    depends_on("m4", type="build", when="+external-cblas")
+    depends_on("m4",       type="build", when="+external-cblas")
     depends_on("autoconf", type="build", when="+external-cblas")
     depends_on("automake", type="build", when="+external-cblas")
-    depends_on("libtool", type="build", when="+external-cblas")
+    # Pinning libtool@2.4.6 appears necessary to be compatible with openblas@0.3.20.
+    depends_on("libtool@2.4.6",  type="build", when="+external-cblas")
     depends_on("blas", when="+external-cblas")
 
     @property
