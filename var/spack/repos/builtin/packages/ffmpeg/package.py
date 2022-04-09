@@ -65,16 +65,33 @@ class Ffmpeg(AutotoolsPackage):
     variant("libvorbis", default=False, description="Vorbis en/decoding")
     variant("libvpx", default=False, description="VP9 en/decoding")
     variant("libwebp", default=False, when="@2.2:", description="WebP encoding via libwebp")
-    variant("libxml2", default=False, description="XML parsing, needed for dash demuxing support")
+    # TODO: There is an issue with the spack headers property in the libxml2
+    # package recipe. Comment out the libxml2 variant until that is resolved.
+    # variant('libxml2', default=False,
+    #         description='XML parsing, needed for dash demuxing support')
     variant("libzmq", default=False, when="@2.0:", description="message passing via libzmq")
     variant("lzma", default=False, when="@2.4:", description="lzma support")
-    variant("avresample", default=False, when="@0.11:4.4", description="AV reasmpling component")
+    variant("avresample", default=False, when="@0.11:4.4", description="AV resampling component")
     variant("openssl", default=False, description="needed for https support")
     variant("sdl2", default=False, when="@3.2:", description="sdl2 support")
     variant("shared", default=True, description="build shared libraries")
+    variant("static", default=True, description="build static libraries")
     variant("libx264", default=False, description="H.264 encoding")
+    variant("alsa", default=True, when="platform=linux", description="Build ALSA support")
+    variant("doc", default=True, description="Build documentation")
+    variant("swscale", default=True, description="Build libswscale")
+    variant("swresample", default=True, description="Build libswresample")
+    variant("postproc", default=True, description="Build libpostproc")
+    variant("stripping", default=True, description="Build stripped binaries")
+    variant("asm", default=True, description="Build handwritten assembly")
+    variant(
+        "web-only",
+        when="%emscripten",
+        default=True,
+        description="Build for the web only, and disable building command-line programs",
+    )
 
-    depends_on("alsa-lib", when="platform=linux")
+    depends_on("alsa-lib", when="+alsa")
     depends_on("libiconv")
     depends_on("yasm@1.2.0:")
     depends_on("zlib")
@@ -104,6 +121,12 @@ class Ffmpeg(AutotoolsPackage):
 
     conflicts("%nvhpc")
 
+    # emscripten build errors:
+    with when("%emscripten"):
+        conflicts("+asm")
+        conflicts("+stripping")
+        conflicts("+alsa")
+
     @property
     def libs(self):
         return find_libraries("*", self.prefix, recursive=True)
@@ -118,9 +141,31 @@ class Ffmpeg(AutotoolsPackage):
         switch = "enable" if "+{0}".format(variant) in self.spec else "disable"
         return ["--{0}-{1}".format(switch, option) for option in options]
 
+    patch("recognize-emcc.patch", when="%emscripten")
+
+    @when("~web-only%emscripten")
+    def install(self, spec, prefix):
+        super(Ffmpeg, self).install(spec, prefix)
+        copy("ffprobe_g.wasm", prefix.bin)
+        copy("ffmpeg_g.wasm", prefix.bin)
+
     def configure_args(self):
         spec = self.spec
         config_args = ["--enable-pic", "--cc={0}".format(spack_cc), "--cxx={0}".format(spack_cxx)]
+        if self.spec.satisfies("%emscripten"):
+            config_args.extend(
+                [
+                    "--arch=wasm32",
+                    "--ranlib=emranlib",
+                    "--ar=emar",
+                    "--nm=emnm",
+                    # --strip=llvm-strip appears to work when only building libraries, but
+                    # when building programs it fails saying the output doesn't have
+                    # a recognized binary format.
+                ]
+            )
+            if "+web-only" in self.spec:
+                config_args.extend(["--disable-programs", "--extra-cflags=-sENVIRONMENT=web"])
 
         # '+X' meta variant #
 
@@ -146,28 +191,36 @@ class Ffmpeg(AutotoolsPackage):
         # other variants #
 
         variant_opts = [
+            "alsa",
+            "asm",
+            "avresample",
             "bzlib",
+            "doc",
             "gpl",
+            "libaom",
             "libmp3lame",
             "libopenjpeg",
             "libopus",
+            "libsnappy",
             "libspeex",
+            "libssh",
             "libvorbis",
             "libvpx",
+            "libwebp",
             "libx264",
+            "libxml2",
+            "libzmq",
+            "lzma",
             "nonfree",
             "openssl",
-            "shared",
-            "version3",
-            "avresample",
-            "libzmq",
-            "libssh",
-            "libwebp",
-            "lzma",
-            "libsnappy",
+            "postproc",
             "sdl2",
-            "libaom",
-            "libxml2",
+            "shared",
+            "static",
+            "stripping",
+            "swresample",
+            "swscale",
+            "version3",
         ]
 
         for variant_opt in variant_opts:

@@ -60,6 +60,11 @@ class NodeJs(Package):
 
     # https://github.com/nodejs/node/blob/master/BUILDING.md#unix-and-macos
     depends_on("gmake@3.81:", type="build")
+    # FIXME: this actually can *only* be python 3.5 for python versions >= 3, but it's
+    # impossible to later install emscripten if we do that, since that requires at least
+    # python 3.7.
+    depends_on("python@2.7:2.8,3.5:", when="@12:", type="build")
+    depends_on("python@2.7:2.8", when="@:11", type="build")
     depends_on("python@3.6:3.11", when="@19.1:", type="build")
     depends_on("python@3.6:3.10", when="@16.11:19.0", type="build")
     depends_on("python@3.6:3.9", when="@16.0:16.10", type="build")
@@ -69,10 +74,13 @@ class NodeJs(Package):
     depends_on("python@2.7,3.5:3.7", when="@12:13.0", type="build")
     depends_on("libtool", type="build", when=sys.platform != "darwin")
     depends_on("pkgconfig", type="build")
-    # depends_on('bash-completion', when="+bash-completion")
+    # depends_on("bash-completion", when="+bash-completion")
     depends_on("icu4c", when="+icu4c")
-    depends_on("openssl@1.1:", when="+openssl")
+    depends_on("openssl@1.0.2d:1.0", when="@:9+openssl")
+    depends_on("openssl@1.1:", when="@10:+openssl")
     depends_on("zlib", when="+zlib")
+
+    executables = ["node"]
 
     phases = ["configure", "build", "install"]
 
@@ -81,6 +89,19 @@ class NodeJs(Package):
         "%gcc@:4.8",
         msg="fails to build with gcc 4.8 (see https://github.com/spack/spack/issues/19310",
     )
+
+    @classmethod
+    def determine_version(cls, exe_path):
+        try:
+            exe = Executable(exe_path)
+            output = exe("--version", output=str, error=str)
+            if not output.startswith("v"):
+                return None
+            return Version(output[1:])
+        except spack.util.executable.ProcessError:
+            pass
+
+        return None
 
     def setup_build_environment(self, env):
         # Force use of experimental Python 3 support

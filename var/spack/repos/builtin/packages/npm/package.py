@@ -17,6 +17,7 @@ class Npm(Package):
 
     git = "https://github.com/npm/cli.git"
     url = "https://registry.npmjs.org/npm/-/npm-9.3.1.tgz"
+    executables = ["npm", "npx"]
 
     version("9.3.1", sha256="41caa26a340b0562bc5429d28792049c980fe3e872b42b82cad94e8f70e37f40")
     version("8.19.3", sha256="634bf4e0dc87be771ebf48a058629960e979a209c20a51ebdbc4897ca6a25260")

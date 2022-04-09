@@ -599,7 +599,10 @@ To resolve this problem, please try the following:
         options += self.configure_args()
 
         with fs.working_dir(self.build_directory, create=True):
-            inspect.getmodule(self.pkg).configure(*options)
+            if self.spec.satisfies("%emscripten"):
+                inspect.getmodule(self.pkg).emconfigure(*options)
+            else:
+                inspect.getmodule(self.pkg).configure(*options)
 
     def build(self, pkg, spec, prefix):
         """Run "make" on the build targets specified by the builder."""

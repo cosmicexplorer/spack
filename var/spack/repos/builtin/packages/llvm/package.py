@@ -82,6 +82,12 @@ class Llvm(CMakePackage, CudaPackage):
         "clang", default=True, description="Build the LLVM C/C++/Objective-C compiler frontend"
     )
     variant(
+        "tools-extra-clang",
+        default=True,
+        description="Build extra tools like clang-tidy on top of clang",
+        when="+clang",
+    )
+    variant(
         "flang",
         default=False,
         when="@11: +clang",
@@ -184,7 +190,8 @@ class Llvm(CMakePackage, CudaPackage):
         default=False,
         when="+lldb platform=darwin",
         description="Enable code-signing on macOS",
-    )
+    ),
+    variant("openmp", default=True, description="Build OpenMP support"),
     variant("python", default=False, description="Install python bindings")
     variant("version_suffix", default="none", description="Add a symbol suffix")
     variant(
@@ -201,6 +208,16 @@ class Llvm(CMakePackage, CudaPackage):
         default=False,
         when="@15:",
         description="Enable zstd support for static analyzer / lld",
+    )
+
+    variant("version_suffix", default="none", description="Add a symbol suffix")
+    variant("z3", default=False, description="Use Z3 for the clang static analyzer")
+
+    variant(
+        "multiple-definitions",
+        default=False,
+        when="targets=webassembly",
+        description="Allow multiple definitions in wasm linking",
     )
 
     provides("libllvm@14", when="@14.0.0:14")
@@ -363,6 +380,11 @@ class Llvm(CMakePackage, CudaPackage):
     # TODO: adjust version constraint and switch to fetching from the upstream GitHub repo
     #  when/if the bugfix is merged
     patch("D133513.diff", level=0, when="@14:15+lldb+python")
+
+    # Allow wasm-ld to have a --allow-multiple-definition flag, turned on by
+    # default. This mirrors the behavior of gcc when producing and consuming
+    # shared libraries.
+    patch("multiple-definitions-wasm.patch", when="+multiple-definitions")
 
     # The functions and attributes below implement external package
     # detection for LLVM. See:
@@ -644,11 +666,13 @@ class Llvm(CMakePackage, CudaPackage):
 
         if "+clang" in spec:
             projects.append("clang")
-            projects.append("clang-tools-extra")
-            if "+omp_as_runtime" in spec:
-                runtimes.append("openmp")
-            else:
-                projects.append("openmp")
+            if "+tools-extra-clang" in spec:
+                projects.append("clang-tools-extra")
+            if "+openmp" in spec:
+                if "+omp_as_runtime" in spec:
+                    runtimes.append("openmp")
+                else:
+                    projects.append("openmp")
 
             if "@8" in spec:
                 cmake_args.append(from_variant("CLANG_ANALYZER_ENABLE_Z3_SOLVER", "z3"))

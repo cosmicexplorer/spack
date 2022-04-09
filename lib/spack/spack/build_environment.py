@@ -587,6 +587,7 @@ def set_module_variables_for_package(pkg):
     m.make_jobs = jobs
 
     # TODO: make these build deps that can be installed if not found.
+    # FIXME: !!!!!
     m.make = MakeExecutable("make", jobs)
     m.gmake = MakeExecutable("gmake", jobs)
     m.ninja = MakeExecutable("ninja", jobs, supports_jobserver=False)
@@ -599,9 +600,28 @@ def set_module_variables_for_package(pkg):
         # analog to configure for win32
         m.cscript = Executable("cscript")
 
+    m.emmake = MakeExecutable("emmake", jobs)
+    m.emmake.add_default_arg("make")
+    m.emmake.add_default_arg("AR=emar")
+    m.emmake.add_default_arg("RANLIB=emranlib")
+    m.emmake.add_default_arg("NM=emnm")
+
+    # easy shortcut to os.environ
+    m.env = os.environ
+
     # Find the configure script in the archive path
     # Don't use which for this; we want to find it in the current dir.
     m.configure = Executable("./configure")
+    m.emconfigure = Executable("emconfigure")
+    m.emconfigure.add_default_arg("./configure")
+
+    m.meson = Executable("meson")
+
+    m.cmake = Executable("cmake")
+    m.emcmake = Executable("emcmake")
+    m.emcmake.add_default_arg("cmake")
+
+    m.ctest = MakeExecutable("ctest", jobs)
 
     # Standard CMake arguments
     m.std_cmake_args = spack.build_systems.cmake.CMakeBuilder.std_args(pkg)
