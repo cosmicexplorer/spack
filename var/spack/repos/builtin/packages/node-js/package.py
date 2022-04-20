@@ -69,10 +69,12 @@ class NodeJs(Package):
     depends_on("python@2.7,3.5:3.7", when="@12:13.0", type="build")
     depends_on("libtool", type="build", when=sys.platform != "darwin")
     depends_on("pkgconfig", type="build")
-    # depends_on('bash-completion', when="+bash-completion")
+    # depends_on("bash-completion", when="+bash-completion")
     depends_on("icu4c", when="+icu4c")
     depends_on("openssl@1.1:", when="+openssl")
     depends_on("zlib", when="+zlib")
+
+    executables = ["node"]
 
     phases = ["configure", "build", "install"]
 
@@ -81,6 +83,19 @@ class NodeJs(Package):
         "%gcc@:4.8",
         msg="fails to build with gcc 4.8 (see https://github.com/spack/spack/issues/19310",
     )
+
+    @classmethod
+    def determine_version(cls, exe_path):
+        try:
+            exe = Executable(exe_path)
+            output = exe("--version", output=str, error=str)
+            if not output.startswith("v"):
+                return None
+            return Version(output[1:])
+        except spack.util.executable.ProcessError:
+            pass
+
+        return None
 
     def setup_build_environment(self, env):
         # Force use of experimental Python 3 support
