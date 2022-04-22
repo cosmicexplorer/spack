@@ -65,7 +65,10 @@ class Ffmpeg(AutotoolsPackage):
     variant("libvorbis", default=False, description="Vorbis en/decoding")
     variant("libvpx", default=False, description="VP9 en/decoding")
     variant("libwebp", default=False, when="@2.2:", description="WebP encoding via libwebp")
-    variant("libxml2", default=False, description="XML parsing, needed for dash demuxing support")
+    # TODO: There is an issue with the spack headers property in the libxml2
+    # package recipe. Comment out the libxml2 variant until that is resolved.
+    # variant('libxml2', default=False,
+    #         description='XML parsing, needed for dash demuxing support')
     variant("libzmq", default=False, when="@2.0:", description="message passing via libzmq")
     variant("lzma", default=False, when="@2.4:", description="lzma support")
     variant("avresample", default=False, when="@0.11:4.4", description="AV reasmpling component")
@@ -73,10 +76,11 @@ class Ffmpeg(AutotoolsPackage):
     variant("sdl2", default=False, when="@3.2:", description="sdl2 support")
     variant("shared", default=True, description="build shared libraries")
     variant("libx264", default=False, description="H.264 encoding")
+    variant("alsa", default=True, when="platform=linux", description="Build ALSA support")
 
-    depends_on("alsa-lib", when="platform=linux")
+    depends_on("alsa-lib", when="+alsa")
     depends_on("libiconv")
-    depends_on("yasm@1.2.0:")
+    # depends_on("yasm@1.2.0:")
     depends_on("zlib")
 
     depends_on("aom", when="+libaom")
@@ -121,6 +125,8 @@ class Ffmpeg(AutotoolsPackage):
     def configure_args(self):
         spec = self.spec
         config_args = ["--enable-pic", "--cc={0}".format(spack_cc), "--cxx={0}".format(spack_cxx)]
+        if "+alsa" not in self.spec:
+            config_args.append("--disable-alsa")
 
         # '+X' meta variant #
 

@@ -75,7 +75,10 @@ class MakefileBuilder(spack.build_systems.makefile.MakefileBuilder, SetupEnviron
         config_args = []
         if "~shared" in self.spec:
             config_args.append("--static")
-        configure("--prefix={0}".format(prefix), *config_args)
+        if self.spec.satisfies("%emscripten"):
+            emconfigure("--prefix={0}".format(prefix), *config_args)
+        else:
+            configure("--prefix={0}".format(prefix), *config_args)
 
         if "+shared" in self.spec:
             # We need to fix the building of the shared libraries with compilers that are not
