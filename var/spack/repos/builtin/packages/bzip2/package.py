@@ -41,6 +41,8 @@ class Bzip2(Package, SourcewarePackage):
         msg="Windows makefile has no recipe for shared builds, use ~shared.",
     )
 
+    patch("no-tty-checking.patch", when="%emscripten")
+
     if sys.platform != "win32":
         depends_on("diffutils", type="build")
 
@@ -115,6 +117,9 @@ class Bzip2(Package, SourcewarePackage):
             )
 
     def install(self, spec, prefix):
+        if self.spec.satisfies("%emscripten"):
+            make = emmake
+
         # Build the dynamic library first
         if "+shared" in spec:
             make("-f", "Makefile-libbz2_so")
@@ -137,6 +142,12 @@ class Bzip2(Package, SourcewarePackage):
         else:
             make()
             make("install", "PREFIX={0}".format(prefix))
+
+        if self.spec.satisfies("%emscripten"):
+            install("bzip2.wasm", join_path(prefix.bin, "bzip2.wasm"))
+            install("bzip2recover.wasm", join_path(prefix.bin, "bzip2recover.wasm"))
+            if "+shared" in spec:
+                install("bzip2-shared.wasm", join_path(prefix.bin, "bzip2-shared.wasm"))
 
         if "+shared" in spec:
             install("bzip2-shared", join_path(prefix.bin, "bzip2"))

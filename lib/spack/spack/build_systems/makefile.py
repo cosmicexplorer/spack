@@ -99,12 +99,18 @@ class MakefileBuilder(BaseBuilder):
     def build(self, pkg, spec, prefix):
         """Run "make" on the build targets specified by the builder."""
         with fs.working_dir(self.build_directory):
-            inspect.getmodule(self.pkg).make(*self.build_targets)
+            if self.spec.satisfies("%emscripten"):
+                inspect.getmodule(self.pkg).emmake(*self.build_targets)
+            else:
+                inspect.getmodule(self.pkg).make(*self.build_targets)
 
     def install(self, pkg, spec, prefix):
         """Run "make" on the install targets specified by the builder."""
         with fs.working_dir(self.build_directory):
-            inspect.getmodule(self.pkg).make(*self.install_targets)
+            if self.spec.satisfies("%emscripten"):
+                inspect.getmodule(self.pkg).emmake(*self.install_targets)
+            else:
+                inspect.getmodule(self.pkg).make(*self.install_targets)
 
     spack.builder.run_after("build")(execute_build_time_tests)
 
