@@ -60,6 +60,8 @@ class NodeJs(Package):
 
     # https://github.com/nodejs/node/blob/master/BUILDING.md#unix-and-macos
     depends_on("gmake@3.81:", type="build")
+    depends_on("python@2.7:2.8", when="@12:", type="build")
+    depends_on("python@2.7:2.8", when="@:11", type="build")
     depends_on("python@3.6:3.11", when="@19.1:", type="build")
     depends_on("python@3.6:3.10", when="@16.11:19.0", type="build")
     depends_on("python@3.6:3.9", when="@16.0:16.10", type="build")
@@ -71,7 +73,8 @@ class NodeJs(Package):
     depends_on("pkgconfig", type="build")
     # depends_on("bash-completion", when="+bash-completion")
     depends_on("icu4c", when="+icu4c")
-    depends_on("openssl@1.1:", when="+openssl")
+    depends_on("openssl@1.0.2d:1.0", when="@:9+openssl")
+    depends_on("openssl@1.1:", when="@10:+openssl")
     depends_on("zlib", when="+zlib")
 
     executables = ["node"]
