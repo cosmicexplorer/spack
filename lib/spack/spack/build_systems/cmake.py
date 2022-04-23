@@ -209,6 +209,38 @@ class CMakeBuilder(BaseBuilder):
     #: Callback names for build-time test
     build_time_test_callbacks = ["check"]
 
+    #: The build system generator to use.
+    #:
+    #: See ``cmake --help`` for a list of valid generators.
+    #: Currently, "Unix Makefiles" and "Ninja" are the only generators
+    #: that Spack supports. Defaults to "Unix Makefiles".
+    #:
+    #: See https://cmake.org/cmake/help/latest/manual/cmake-generators.7.html
+    #: for more information.
+
+    # generator = "Unix Makefiles"
+    generator = "Ninja"
+    depends_on("ninja", type="build")
+
+    if sys.platform == "win32":
+        generator = "Ninja"
+        depends_on("ninja", type="build")
+
+    # https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html
+    variant(
+        "build_type",
+        default="RelWithDebInfo",
+        description="CMake build type",
+        values=("Debug", "Release", "RelWithDebInfo", "MinSizeRel"),
+    )
+
+    # https://cmake.org/cmake/help/latest/variable/CMAKE_INTERPROCEDURAL_OPTIMIZATION.html
+    variant("ipo", default=False, description="CMake interprocedural optimization")
+    # CMAKE_INTERPROCEDURAL_OPTIMIZATION only exists for CMake >= 3.9
+    conflicts("+ipo", when="^cmake@:3.8", msg="+ipo is not supported by CMake < 3.9")
+
+    depends_on("cmake", type="build")
+
     @property
     def archive_files(self):
         """Files to archive for packages based on CMake"""
