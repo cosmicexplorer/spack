@@ -381,7 +381,9 @@ class Llvm(CMakePackage, CudaPackage):
     #  when/if the bugfix is merged
     patch("D133513.diff", level=0, when="@14:15+lldb+python")
 
-    # Allow wasm-ld to have a --allow-multiple-definition or -z muldefs flag.
+    # Allow wasm-ld to have a --allow-multiple-definition flag, turned on by
+    # default. This mirrors the behavior of gcc when producing and consuming
+    # shared libraries.
     patch("multiple-definitions-wasm.patch", when="+multiple-definitions")
 
     # The functions and attributes below implement external package
