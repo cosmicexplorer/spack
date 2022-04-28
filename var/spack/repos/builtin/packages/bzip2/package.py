@@ -117,12 +117,15 @@ class Bzip2(Package, SourcewarePackage):
             )
 
     def install(self, spec, prefix):
-        if self.spec.satisfies("%emscripten"):
-            make = emmake
+        def do_make(*args):
+            if self.spec.satisfies("%emscripten"):
+                emmake(*args)
+            else:
+                make(*args)
 
         # Build the dynamic library first
         if "+shared" in spec:
-            make("-f", "Makefile-libbz2_so")
+            do_make("-f", "Makefile-libbz2_so")
 
         # Build the static library and everything else
         if self.spec.satisfies("platform=windows"):
@@ -140,8 +143,9 @@ class Bzip2(Package, SourcewarePackage):
             install("*.exe", self.prefix.bin)
             install("*.1", self.prefix.man.man1)
         else:
-            make()
-            make("install", "PREFIX={0}".format(prefix))
+            # Now build the static library and everything else
+            do_make()
+            do_make("install", "PREFIX={0}".format(prefix))
 
         if self.spec.satisfies("%emscripten"):
             install("bzip2.wasm", join_path(prefix.bin, "bzip2.wasm"))
