@@ -83,6 +83,7 @@ class Ffmpeg(AutotoolsPackage):
     variant("swresample", default=True, description="Build libswresample")
     variant("postproc", default=True, description="Build libpostproc")
     variant("stripping", default=True, description="Build stripped binaries")
+    variant("asm", default=True, description="Build handwritten assembly")
 
     depends_on("alsa-lib", when="+alsa")
     depends_on("libiconv")
@@ -114,6 +115,12 @@ class Ffmpeg(AutotoolsPackage):
 
     conflicts("%nvhpc")
 
+    # emscripten build errors:
+    with when("%emscripten"):
+        conflicts("+asm")
+        conflicts("+stripping")
+        conflicts("+alsa")
+
     @property
     def libs(self):
         return find_libraries("*", self.prefix, recursive=True)
@@ -128,23 +135,29 @@ class Ffmpeg(AutotoolsPackage):
         switch = "enable" if "+{0}".format(variant) in self.spec else "disable"
         return ["--{0}-{1}".format(switch, option) for option in options]
 
-    def flag_handler(self, name, flags):
-        if self.spec.satisfies("%emscripten"):
-            if name == "ldflags":
-                # This is a patch to LLVM which only works if
-                # "llvm+multiple-definitions" is enabled.
-                flags.append("{}--allow-multiple-definition".format(self.compiler.linker_arg))
-        return (flags, None, None)
+    patch("recognize-emcc.patch", when="%emscripten")
 
-    patch("disable-asm.patch", when="%emscripten")
+    @when("%emscripten")
+    def install(self, spec, prefix):
+        super(Ffmpeg, self).install(spec, prefix)
+        copy("ffprobe_g.wasm", prefix.bin)
+        copy("ffmpeg_g.wasm", prefix.bin)
 
     def configure_args(self):
         spec = self.spec
         config_args = ["--enable-pic", "--cc={0}".format(spack_cc), "--cxx={0}".format(spack_cxx)]
-        if "+alsa" not in self.spec:
-            config_args.append("--disable-alsa")
         if self.spec.satisfies("%emscripten"):
-            config_args.extend(["--disable-asm", "--arch=wasm32", "--disable-programs"])
+            config_args.extend(
+                [
+                    "--arch=wasm32",
+                    "--ranlib=emranlib",
+                    "--ar=emar",
+                    "--nm=emnm",
+                    # --strip=llvm-strip appears to work when only building libraries, but
+                    # when building programs it fails saying the output doesn't have
+                    # a recognized binary format.
+                ]
+            )
 
         # '+X' meta variant #
 
@@ -171,6 +184,7 @@ class Ffmpeg(AutotoolsPackage):
 
         variant_opts = [
             "alsa",
+            "asm",
             "avresample",
             "bzlib",
             "doc",
