@@ -71,7 +71,7 @@ class Ffmpeg(AutotoolsPackage):
     #         description='XML parsing, needed for dash demuxing support')
     variant("libzmq", default=False, when="@2.0:", description="message passing via libzmq")
     variant("lzma", default=False, when="@2.4:", description="lzma support")
-    variant("avresample", default=False, when="@0.11:4.4", description="AV reasmpling component")
+    variant("avresample", default=False, when="@0.11:4.4", description="AV resampling component")
     variant("openssl", default=False, description="needed for https support")
     variant("sdl2", default=False, when="@3.2:", description="sdl2 support")
     variant("shared", default=True, description="build shared libraries")
@@ -84,6 +84,12 @@ class Ffmpeg(AutotoolsPackage):
     variant("postproc", default=True, description="Build libpostproc")
     variant("stripping", default=True, description="Build stripped binaries")
     variant("asm", default=True, description="Build handwritten assembly")
+    variant(
+        "web-only",
+        when="%emscripten",
+        default=True,
+        description="Build for the web only, and disable building command-line programs",
+    )
 
     depends_on("alsa-lib", when="+alsa")
     depends_on("libiconv")
@@ -137,7 +143,7 @@ class Ffmpeg(AutotoolsPackage):
 
     patch("recognize-emcc.patch", when="%emscripten")
 
-    @when("%emscripten")
+    @when("~web-only%emscripten")
     def install(self, spec, prefix):
         super(Ffmpeg, self).install(spec, prefix)
         copy("ffprobe_g.wasm", prefix.bin)
@@ -158,6 +164,8 @@ class Ffmpeg(AutotoolsPackage):
                     # a recognized binary format.
                 ]
             )
+            if "+web-only" in self.spec:
+                config_args.extend(["--disable-programs", "--extra-cflags=-sENVIRONMENT=web"])
 
         # '+X' meta variant #
 
