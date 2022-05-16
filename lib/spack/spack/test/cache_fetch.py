@@ -23,11 +23,11 @@ def test_fetch_cache_location_override():
     with spack.config.override('config:source_cache', ''):
         assert spack.caches.fetch_cache_location() == spack.paths.user_repos_cache_path
 
-    abs_pref = '' if is_windows else '/'
-    source_cache = os.path.join(abs_pref, 'source-cache', 'subdir', '..', 'subdir2')
-    source_cache_canon = os.path.join(abs_pref, 'source-cache', 'subdir2')
+    source_cache = os.path.join('source-cache', 'subdir', '..', 'subdir2')
+    source_cache_canon = os.path.join('source-cache', 'subdir2')
     with spack.config.override('config:source_cache', source_cache):
-        assert spack.caches.fetch_cache_location() == source_cache_canon
+        full_cache_canon = os.path.join(os.getcwd(), source_cache_canon)
+        assert spack.caches.fetch_cache_location() == full_cache_canon
 
 
 @pytest.mark.parametrize('_fetch_method', ['curl', 'urllib'])
