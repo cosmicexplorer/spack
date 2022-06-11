@@ -352,14 +352,13 @@ def test_get_full_repo(get_full_repo, git_version, mock_git_repository,
         if get_full_repo:
             assert branches[0] == '* (no branch)'
             assert branches[1].startswith('  spack-internal-'), branches
-            assert branches[2].startswith('  spack-internal-'), branches
-            assert branches[3:] == ['  tag-branch', '  test-branch']
+            assert branches[2:] == ['  tag-branch']
             assert len(commits) == 3
         else:
             assert branches[0] == '* (no branch)'
             assert branches[1].startswith('  spack-internal-'), branches
             assert branches[2:] == ['  tag-branch']
-            assert len(commits) == 3
+            assert len(commits) == 1
 
 
 @pytest.mark.disable_clean_stage_check

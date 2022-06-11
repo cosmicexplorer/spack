@@ -1000,11 +1000,12 @@ Git fetching supports the following parameters to ``version``:
 * ``submodules_delete``: A list of submodules to forcibly delete from the repository
   after fetching. Useful if a version in the repository has submodules that
   have disappeared/are no longer accessible.
-* ``get_full_repo``: Ensure the full git history is checked out with all remote
-  branch information. Normally (``get_full_repo=False``, the default), the git
-  option ``--depth 1`` will be used if the version of git and the specified
-  transport protocol support it, and ``--single-branch`` will be used if the
-  version of git supports it. This must be a ``bool`` or ``None``.
+* ``get_full_repo``: Ensure the full git history is checked out with all remote branch
+  information. With the default of ``get_full_repo=False``, only the precise refs
+  necessary for the stage are checked out, using the ``--depth 1`` option if the version
+  of git and the specified transport protocol in the git remote url support it
+  (``http://`` urls and raw file paths without the ``file://`` prefix do not). This must
+  be a ``bool`` or ``None``.
 
 Only one of ``tag``, ``branch``, or ``commit`` can be used at a time.
 

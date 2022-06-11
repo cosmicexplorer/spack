@@ -1312,6 +1312,14 @@ class GitRepo(object):
         except ProcessError:
             return None
 
+    @staticmethod
+    def protocol_supports_shallow_clone(remote_url):
+        """Shallow clone operations (--depth #) are not supported by the basic
+        HTTP protocol or by no-protocol file specifications.
+        Use (e.g.) https:// or file:// instead."""
+        return not (remote_url.startswith('http://') or
+                    remote_url.startswith('/'))
+
     def fetch(self, remote_url, ref, stage_config, verbose):
         # type: (str, GitRef, GitFetchStageConfiguration, bool) -> None
         """Fetch the specified ref from the specified remote into the current repo."""
@@ -1322,25 +1330,41 @@ class GitRepo(object):
                 'on-demand' if stage_config.submodules else 'no'),
         )
 
+        # In the case of get_full_repo=True, we've already pulled down everything from
+        # the remote, so we don't need to specify "--depth 1".
+        depth_args = ()  # type: Tuple[str, ...]
         # If `get_full_repo=True`, first try to pull all new content down from the
         # remote without force-updating anything, and swallow any errors.
         if stage_config.get_full_repo:
             try:
                 # The refspec will fetch all branches from the remote, while
                 # '--tags' will fetch tags pointing into any of those branches.
-                full_args = args + ('--tags', remote_url, 'refs/heads/*:refs/heads/*')
+                full_args = args + (
+                    # If the checkout was previously a shallow one (with --depth 1),
+                    # then pull all the relevant information down.
+                    '--unshallow',
+                    '--tags',
+                    remote_url,
+                    'refs/heads/*:refs/heads/*',
+                )
                 self.with_debug_output(*full_args)
             except ProcessError:
                 # If a branch was force-updated so it can't be fast-forwarded, or if
                 # a tag was modified at all upstream, then this `git fetch` call will
                 # exit nonzero, but still do as much useful work as it can.
                 pass
+        else:
+            # Since get_full_repo=None/False, we *do* want to avoid pulling down the
+            # entire repo history if at all possible.
+            if self.git.version >= spack.version.ver('1.7.1') and \
+               self.protocol_supports_shallow_clone(remote_url):
+                depth_args = ('--depth', '1')
 
         # Run `git fetch` again, ensuring that branches are updated from the remote even
         # if they cannot be fast-forwarded. Changing any tags upstream at all will raise
         # a FailedGitFetch.
         try:
-            fetch_args = args + (remote_url, ref.fetch_spec())
+            fetch_args = args + depth_args + (remote_url, ref.fetch_spec())
             self.with_debug_output(*fetch_args)
         except ProcessError as e:
             raise six.raise_from(  # type: ignore[attr-defined]
