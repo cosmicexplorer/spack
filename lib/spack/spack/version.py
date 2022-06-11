@@ -29,7 +29,7 @@ import os
 import re
 from bisect import bisect_left
 from functools import wraps
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple  # novm
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union  # novm
 
 from six import string_types
 
@@ -194,15 +194,15 @@ class Version(object):
             raise ValueError("Bad characters in version string: %s" % string)
 
         # An object that can lookup git commits to compare them to versions
-        self._commit_lookup = None
-        self.commit_version = None
+        self._commit_lookup = None  # type: Optional[CommitLookup]
+        self.commit_version = None  # type: Optional[Version]
         segments = SEGMENT_REGEX.findall(string)
         self.version = tuple(
             int(m[0]) if m[0] else VersionStrComponent(m[1]) for m in segments
         )
         self.separators = tuple(m[2] for m in segments)
 
-        self.is_commit = len(self.string) == 40 and COMMIT_VERSION.match(self.string)
+        self.is_commit = COMMIT_VERSION.match(self.string)
 
     _v_prefix = re.compile(r'^v')
 
@@ -219,6 +219,7 @@ class Version(object):
         return None
 
     def _cmp(self, other_lookups=None):
+        # type: (Optional[CommitLookup]) -> Version
         commit_lookup = self.commit_lookup or other_lookups
 
         if self.is_commit and commit_lookup:
@@ -1025,6 +1026,18 @@ class CommitLookup(object):
         self.pkg_name = pkg_name
         self.data = {}
 
+    def __repr__(self):
+        # type: () -> str
+        return '{0}(pkg_name={1!r}, data={2!r})'.format(
+            type(self).__name__,
+            self.pkg_name,
+            self.data,
+        )
+
+    def __str__(self):
+        # type: () -> str
+        return '<commit lookup for {0}, data was {1}>'.format(self.pkg_name, self.data)
+
     @property
     def git_repo_path(self):
         # type: () -> str
@@ -1171,7 +1184,7 @@ class CommitLookup(object):
             else:
                 # Get list of all commit in reverse order. We then use this to get the
                 # first commit.
-                commits = git_repo.commits_for()
+                commits = git_repo.all_commits_for()
 
                 # No previous version, so calculate distance from the first commit.
                 distance = git_repo.calculate_ancestry_distance(

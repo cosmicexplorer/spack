@@ -51,7 +51,12 @@ import spack.test.cray_manifest
 import spack.util.executable
 import spack.util.gpg
 import spack.util.spack_yaml as syaml
-from spack.fetch_strategy import FetchError, FetchStrategyComposite, URLFetchStrategy
+from spack.fetch_strategy import (
+    FetchError,
+    FetchStrategyComposite,
+    GitRef,
+    URLFetchStrategy,
+)
 from spack.util.pattern import Bunch
 
 is_windows = sys.platform == 'win32'
@@ -71,15 +76,16 @@ def last_two_git_commits():
     yield regex.findall(git_log_out)
 
 
-def write_file(filename, contents):
-    with open(filename, 'w') as f:
-        f.write(contents)
+def write_file(git_repo, filename, contents):
+    with working_dir(git_repo.repo_path):
+        with open(filename, 'w') as f:
+            f.write(contents)
 
 
 commit_counter = 0
 
 
-@pytest.fixture
+@pytest.fixture(scope='function')
 def override_git_repos_cache_path(tmpdir):
     saved = spack.paths.user_repos_cache_path
     tmp_path = tmpdir.mkdir('git-repo-cache-path-for-tests')
@@ -88,9 +94,8 @@ def override_git_repos_cache_path(tmpdir):
     spack.paths.user_repos_cache_path = saved
 
 
-@pytest.fixture
-def mock_git_version_info(tmpdir, override_git_repos_cache_path,
-                          scope="function"):
+@pytest.fixture(scope='function')
+def mock_git_version_info(tmpdir, override_git_repos_cache_path):
     """Create a mock git repo with known structure
 
     The structure of commits in this repo is as follows::
@@ -115,77 +120,80 @@ def mock_git_version_info(tmpdir, override_git_repos_cache_path,
     version tags on multiple branches, and version order is not equal to time
     order or topological order.
     """
-    git = spack.util.executable.which('git', required=True)
+    # Initialize the git repository in a new temp directory.
     repo_path = str(tmpdir.mkdir('git_repo'))
+    git = spack.util.executable.which('git', required=True)
+    git = fs.ConfiguredGit.from_executable(git)
+    git = fs.GitRepo.initialize_idempotently(git, str(repo_path))
+
     filename = 'file.txt'
 
-    def commit(message):
+    def commit(message, **kwargs):
         global commit_counter
-        git('commit', '--date', '2020-01-%02d 12:0:00 +0300' % commit_counter,
-            '-am', message)
+        git.commit(
+            message,
+            date='2020-01-%02d 12:0:00 +0300' % commit_counter,
+            autostage_modified=True,
+            **kwargs,
+        )
         commit_counter += 1
 
-    with working_dir(repo_path):
-        git("init")
+    commits = []
 
-        git('config', 'user.name', 'Spack')
-        git('config', 'user.email', 'spack@spack.io')
+    def latest_commit():
+        return git.head_commits()[0]
 
-        commits = []
+    # Add two commits on main branch.
+    write_file(git, filename, '[]')
+    git.add(filename)
+    commit('first commit')
+    commits.append(latest_commit())
 
-        def latest_commit():
-            return git('rev-list', '-n1', 'HEAD', output=str, error=str).strip()
+    # Get name of default branch (differs by git version/config).
+    main = git.default_branch()
 
-        # Add two commits on main branch
-        write_file(filename, '[]')
-        git('add', filename)
-        commit('first commit')
-        commits.append(latest_commit())
+    # Tag second commit as v1.0
+    write_file(git, filename, "[1, 0]")
+    commit('second commit')
+    commits.append(latest_commit())
+    git.tag(GitRef.Tag('v1.0'))
 
-        # Get name of default branch (differs by git version)
-        main = git('rev-parse', '--abbrev-ref', 'HEAD', output=str, error=str).strip()
+    # Add two commits and a tag on 1.x branch.
+    branch_1x = GitRef.Branch('1.x')
+    git.checkout(branch_1x, create=True)
+    write_file(git, filename, "[1, 0, '', 1]")
+    commit('first 1.x commit')
+    commits.append(latest_commit())
 
-        # Tag second commit as v1.0
-        write_file(filename, "[1, 0]")
-        commit('second commit')
-        commits.append(latest_commit())
-        git('tag', 'v1.0')
+    write_file(git, filename, "[1, 1]")
+    commit('second 1.x commit')
+    commits.append(latest_commit())
+    git.tag(GitRef.Tag('v1.1'))
 
-        # Add two commits and a tag on 1.x branch
-        git('checkout', '-b', '1.x')
-        write_file(filename, "[1, 0, '', 1]")
-        commit('first 1.x commit')
-        commits.append(latest_commit())
+    # Add two commits and a tag on main branch
+    git.checkout(main)
+    write_file(git, filename, "[1, 0, '', 1]")
+    commit('third main commit')
+    commits.append(latest_commit())
+    write_file(git, filename, "[2, 0]")
+    commit('fourth main commit')
+    commits.append(latest_commit())
+    git.tag(GitRef.Tag('v2.0'))
 
-        write_file(filename, "[1, 1]")
-        commit('second 1.x commit')
-        commits.append(latest_commit())
-        git('tag', 'v1.1')
+    # Add two more commits on 1.x branch to ensure we aren't cheating by using time
+    git.checkout(branch_1x)
+    write_file(git, filename, "[1, 1, '', 1]")
+    commit('third 1.x commit')
+    commits.append(latest_commit())
+    write_file(git, filename, "[1, 2]")
+    commit('fourth 1.x commit')
+    commits.append(latest_commit())
+    git.tag(GitRef.Tag('1.2'))  # test robust parsing to different syntax, no v
 
-        # Add two commits and a tag on main branch
-        git('checkout', main)
-        write_file(filename, "[1, 0, '', 1]")
-        commit('third main commit')
-        commits.append(latest_commit())
-        write_file(filename, "[2, 0]")
-        commit('fourth main commit')
-        commits.append(latest_commit())
-        git('tag', 'v2.0')
+    # The commits are now ordered with the oldest commit first in the list.
+    commits = [commit.unwrap() for commit in reversed(commits)]
 
-        # Add two more commits on 1.x branch to ensure we aren't cheating by using time
-        git('checkout', '1.x')
-        write_file(filename, "[1, 1, '', 1]")
-        commit('third 1.x commit')
-        commits.append(latest_commit())
-        write_file(filename, "[1, 2]")
-        commit('fourth 1.x commit')
-        commits.append(latest_commit())
-        git('tag', '1.2')  # test robust parsing to different syntax, no v
-
-        # The commits are ordered with the last commit first in the list
-        commits = list(reversed(commits))
-
-    # Return the git directory to install, the filename used, and the commits
+    # Return the git directory to install, the filename used, and the commits.
     yield repo_path, filename, commits
 
 

@@ -899,6 +899,14 @@ class GitRef(object):
         assert self.ref_type == 'Branch', self
         return 'refs/heads/{0}'.format(self._ref)
 
+    def checkout_spec(self):
+        # type: () -> str
+        """Return a string that tells git to check out this ref without a detached
+        HEAD warning.
+
+        In most cases, this is equivalent to self.refspec()."""
+        return self.refspec()
+
     def fetch_spec(self):
         # type: () -> str
         """Return an argument to update a local ref from the remote, if applicable."""
@@ -1276,7 +1284,7 @@ class GitRepo(object):
         """List tags (with their commit hash) by date, with the newest at the bottom."""
         return list(self._iter_tags())
 
-    def _iter_commits(self):
+    def _iter_all_commits(self):
         # type: () -> Iterator[GitCommit]
         for line in (self('log', '--all', '--pretty=format:%H',
                           output=str)
@@ -1284,10 +1292,22 @@ class GitRepo(object):
                      .splitlines()):
             yield GitRef.Commit(line)
 
-    def commits_for(self):
+    def all_commits_for(self):
         # type: () -> List[GitCommit]
         """List all commits in the repo, in reverse order."""
-        return list(self._iter_commits())
+        return list(self._iter_all_commits())
+
+    def _iter_head_commits(self):
+        # type: () -> Iterator[GitCommit]
+        for line in (self('rev-list', 'HEAD', output=str, error=str)
+                     .strip()
+                     .splitlines()):
+            yield GitRef.Commit(line)
+
+    def head_commits(self):
+        # type: () -> List[GitCommit]
+        """List all commits since HEAD, in reverse order."""
+        return list(self._iter_head_commits())
 
     def calculate_ancestry_distance(self, a, b):
         # type: (GitRef, GitRef) -> Optional[int]
@@ -1312,13 +1332,43 @@ class GitRepo(object):
         except ProcessError:
             return None
 
+    def default_branch(self):
+        # type: () -> GitBranch
+        return GitRef.Branch(
+            self('rev-parse', '--abbrev-ref', 'HEAD', output=str, error=str).strip(),
+        )
+
+    def config_set(self, key, value):
+        # type: (str, str) -> None
+        self.with_debug_output('config', key, value)
+
+    def commit(self, message, date=None, autostage_modified=False, allow_empty=False):
+        # type: (str, Optional[str], bool, bool) -> None
+        empty_args = () if message else ('--allow-empty-message',)
+        autostage_args = ('--all',) if autostage_modified else ()
+        date_args = ('--date', date) if date else ()
+        allow_empty_args = ('--allow-empty',) if allow_empty else ()
+        self.with_debug_output(
+            'commit',
+            *empty_args,
+            *autostage_args,
+            *date_args,
+            *allow_empty_args,
+            '-m', message,
+        )
+
+    def add(self, *files):
+        # type: (str) -> None
+        self.with_debug_output('add', *files)
+
     @staticmethod
     def protocol_supports_shallow_clone(remote_url):
+        # type: (str) -> bool
         """Shallow clone operations (--depth #) are not supported by the basic
         HTTP protocol or by no-protocol file specifications.
         Use (e.g.) https:// or file:// instead."""
-        return not (remote_url.startswith('http://') or
-                    remote_url.startswith('/'))
+        scheme, _, _, _, _ = url_util.parse_git_url(remote_url)
+        return not (scheme is None or scheme == 'http')
 
     def fetch(self, remote_url, ref, stage_config, verbose):
         # type: (str, GitRef, GitFetchStageConfiguration, bool) -> None
@@ -1419,10 +1469,15 @@ class GitRepo(object):
         """Create a new branch head named <branch> which points to the current HEAD."""
         self.with_debug_output('branch', branch.checkout_spec())
 
-    def checkout(self, branch):
-        # type: (GitBranch) -> None
+    def checkout(
+        self,
+        branch=GitRef.Branch('spack-internal-{0}'.format(uuid.uuid4())),
+        create=False,
+    ):
+        # type: (GitRef, bool) -> None
         """Check out <branch> without a detached HEAD warning."""
-        self.with_debug_output('checkout', branch.checkout_spec())
+        create_args = ('-b',) if create else ()
+        self.with_debug_output('checkout', *create_args, branch.checkout_spec())
 
     def tag(self, tag):
         # type: (GitTag) -> None
@@ -1456,21 +1511,18 @@ class GitRepo(object):
         # To set a branch and make a commit without failing, we need to set a user.name
         # and user.email in this repository's config, in case it's not
         # configured globally.
-        self.with_debug_output('config', 'user.name', 'spack-internal-generated-user')
-        self.with_debug_output('config', 'user.email',
-                               'spack-internal-generated-user@example.org')
+        self.config_set('user.name', 'spack-internal-generated-user')
+        self.config_set('user.email', 'spack-internal-generated-user@example.org')
         # We will also avoid any stderr message about a detached HEAD.
         # FIXME: isn't this already covered by .add_default_arg() earlier?
-        self.with_debug_output('config', 'advice.detachedHead', 'false')
+        self.config_set('advice.detachedHead', 'false')
         # `git branch` will only produce empty output immediately after `git
         # init` is run. In this case, we need to create a single ref guaranteed not to
         # collide with any branch name the user might want to check out, so we generate
         # a random UUID.
-        self.with_debug_output('checkout', '-b',
-                               'spack-internal-{0}'.format(uuid.uuid4()))
+        self.checkout(create=True)
         # Creating a ref requires making a commit.
-        self.with_debug_output('commit', '--allow-empty',
-                               '--allow-empty-message', '-m', '')
+        self.commit('', allow_empty=True)
 
     @classmethod
     def initialize_idempotently(cls, git, repo_path):
