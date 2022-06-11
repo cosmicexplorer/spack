@@ -33,7 +33,9 @@ import sys
 import uuid
 from textwrap import dedent
 from typing import (  # novm
+    TYPE_CHECKING,
     Any,
+    Callable,
     ClassVar,
     Dict,
     Iterator,
@@ -41,6 +43,7 @@ from typing import (  # novm
     Optional,
     Tuple,
     Type,
+    Union,
     cast,
 )
 
@@ -70,6 +73,9 @@ import spack.version
 from spack.util.compression import decompressor_for, extension
 from spack.util.executable import CommandNotFoundError, Executable, ProcessError, which
 from spack.util.string import comma_and, quote
+
+if TYPE_CHECKING:
+    from spack.package_base import PackageBase
 
 #: List of all fetch strategies, created by FetchStrategy metaclass.
 all_strategies = []
@@ -1035,6 +1041,9 @@ class GitBranch(GitRef):
 GitRef.Branch = GitBranch       # noqa: E305
 
 
+_SubmodulesType = Union[bool, 'Callable[[PackageBase], List[str]]']
+
+
 class GitFetchStageConfiguration(object):
     """Validate parameters used to customize a specific git fetch operation.
 
@@ -1042,7 +1051,7 @@ class GitFetchStageConfiguration(object):
     what operations are performed to *prepare* a git checkout for a spack `Stage`,
     *after* fetching the configured ref.
     """
-    submodules = None           # type: bool
+    submodules = None           # type: _SubmodulesType
     submodules_delete = None    # type: Optional[List[str]]
     get_full_repo = None        # type: bool
 
@@ -1055,7 +1064,7 @@ class GitFetchStageConfiguration(object):
         )
 
     def __init__(self, submodules, submodules_delete, get_full_repo):
-        # type: (bool, Optional[List[str]], bool) -> None
+        # type: (_SubmodulesType, Optional[List[str]], bool) -> None
         self.submodules = submodules
         self.submodules_delete = submodules_delete
         self.get_full_repo = get_full_repo
@@ -1070,15 +1079,30 @@ class GitFetchStageConfiguration(object):
             'argument {0}={1!r} must be a bool'.format(name, value))
 
     @classmethod
+    def _extract_bool_or_callable(cls, kwargs, name, default):
+        # type: (Any, str, _SubmodulesType) -> _SubmodulesType
+        value = kwargs.pop(name, default)
+        if isinstance(value, bool) or callable(value):
+            return value
+        raise InvalidGitFetchStageConfig(
+            'argument {0}={1!r} must be a bool or callable'.format(name, value))
+
+    @classmethod
+    def _extract_list(cls, kwargs, name, default):
+        # type: (Any, str, Optional[List[str]]) -> Optional[List[str]]
+        value = kwargs.pop(name, default)
+        if isinstance(value, (list, type(None))):
+            return value
+        raise InvalidGitFetchStageConfig(
+            'argument {0}={1!r} must be a list of str or None'
+            .format(name, value))
+
+    @classmethod
     def from_version_directive(cls, kwargs):
         # type: (Any) -> GitFetchStageConfiguration
         try:
-            submodules = cls._extract_bool(kwargs, 'submodules', False)
-            submodules_delete = kwargs.pop('submodules_delete', None)
-            if not isinstance(submodules_delete, (list, type(None))):
-                raise InvalidGitFetchStageConfig(
-                    'argument submodules_delete={0!r} must be a list of str'
-                    .format(submodules_delete))
+            submodules = cls._extract_bool_or_callable(kwargs, 'submodules', False)
+            submodules_delete = cls._extract_list(kwargs, 'submodules_delete', None)
             get_full_repo = cls._extract_bool(kwargs, 'get_full_repo', False)
         except InvalidGitFetchStageConfig as e:
             raise six.raise_from(  # type: ignore[attr-defined]
@@ -1348,12 +1372,18 @@ class GitRepo(object):
         # type: (bool) -> Tuple[str, ...]
         return () if verbose else ('--quiet',)
 
-    def update_submodules(self, verbose=False):
-        # type: (bool) -> None
-        args = ('submodule',) + self._verbosity_args(verbose=verbose) + (
-            'update', '--init', '--recursive',
-        )
-        self.with_debug_output(*args)
+    def update_submodules(self, submodules_arg, verbose=False):
+        # type: (Union[bool, List[str]], bool) -> None
+        if isinstance(submodules_arg, list):
+            init_args = ('submodule', 'init', '--') + tuple(submodules_arg)
+            self.with_debug_output(*init_args)
+            update_args = ('submodule', 'update', '--recursive')
+            self.with_debug_output(*update_args)
+        else:
+            args = ('submodule',) + self._verbosity_args(verbose=verbose) + (
+                'update', '--init', '--recursive',
+            )
+            self.with_debug_output(*args)
 
     def delete_submodule(self, submodule_path, verbose=False):
         # type: (str, bool) -> None
@@ -1591,10 +1621,15 @@ class GitFetchStrategy(VCSFetchStrategy):
 
         verbose = bool(spack.config.get('config:debug'))
 
+        submodules = False  # type: Union[bool, List[str]]
         if self.stage_config.submodules:
             # We decided whether to fetch submodule info earlier, but this command
             # actually performs the update operations over the checked-out submodules.
-            worktree_repo.update_submodules(verbose=verbose)
+            if callable(self.stage_config.submodules):
+                submodules = self.stage_config.submodules(self.package)
+            else:
+                submodules = cast(bool, self.stage_config.submodules)
+            worktree_repo.update_submodules(submodules, verbose=verbose)
 
             if self.stage_config.submodules_delete:
                 for submodule_to_delete in self.stage_config.submodules_delete:

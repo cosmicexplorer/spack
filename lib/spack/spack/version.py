@@ -45,7 +45,7 @@ from spack.util.spack_yaml import syaml_dict
 
 if TYPE_CHECKING:
     from spack.fetch_strategy import GitCommit, GitFetchStrategy
-    from spack.package import PackageBase
+    from spack.package_base import PackageBase
 
 __all__ = ['Version', 'VersionRange', 'VersionList', 'ver']
 
