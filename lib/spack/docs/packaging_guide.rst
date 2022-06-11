@@ -992,7 +992,11 @@ Git fetching supports the following parameters to ``version``:
   log --format='%h'``, while 40 hex characters is the size printed out by ``git
   log --format='%H'``.
 * ``submodules``: Also fetch submodules recursively when checking out this
-  repository. This must be a ``bool`` or ``None``.
+  repository. This is typically either a ``bool`` or ``None`` (and defaults to
+  ``None``). However, this may also be set to a function accepting a single ``Package``
+  argument and returning a list of strings with the submodule paths to check out. If
+  a function is provided, it is executed *after* concretization, when the package is
+  being staged.
 * ``submodules_delete``: A list of submodules to forcibly delete from the repository
   after fetching. Useful if a version in the repository has submodules that
   have disappeared/are no longer accessible.
