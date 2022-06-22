@@ -67,7 +67,7 @@ class Libunwind(AutotoolsPackage):
     reconf_versions = '@master,1.5-stable,1.6-stable'
     depends_on('autoconf', type='build', when=reconf_versions)
     depends_on('automake', type='build', when=reconf_versions)
-    depends_on('libtool',  type='build', when=reconf_versions)
+    depends_on('libtool@2.4.7',  type='build', when=reconf_versions)
     depends_on('m4',       type='build', when=reconf_versions)
 
     depends_on('xz', type='link', when='+xz')
