@@ -15,6 +15,7 @@ from llnl.util.filesystem import (
     find_all_headers,
     find_libraries,
     is_nonsymlink_exe_with_shebang,
+    join_path,
     path_contains_subdirectory,
     same_path,
     working_dir,
@@ -243,8 +244,8 @@ class PythonPackage(PackageBase):
         """Discover header files in platlib."""
 
         # Headers may be in either location
-        include = inspect.getmodule(self).include
-        platlib = inspect.getmodule(self).platlib
+        include = join_path(self.prefix, self.spec["python"].package.include)
+        platlib = include = join_path(self.prefix, self.spec["python"].package.platlib)
         headers = find_all_headers(include) + find_all_headers(platlib)
 
         if headers:
