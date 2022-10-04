@@ -1696,10 +1696,9 @@ class FileList(Sequence):
         return list(dedupe(os.path.basename(x) for x in self.files))
 
     def __getitem__(self, item):
-        cls = type(self)
         if isinstance(item, numbers.Integral):
             return self.files[item]
-        return cls(self.files[item])
+        return self.__class__(self.files[item])
 
     def __add__(self, other):
         return self.__class__(dedupe(self.files + list(other)))
