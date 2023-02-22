@@ -5,6 +5,7 @@
 
 import glob
 import os.path
+import re
 
 from spack.package import *
 
@@ -144,4 +145,39 @@ class Elfutils(AutotoolsPackage, SourcewarePackage):
     # Provide location of libelf.so to match libelf.
     @property
     def libs(self):
-        return find_libraries("libelf", self.prefix, recursive=True)
+        return (
+            find_libraries("libelf", self.prefix, recursive=True)
+            + find_libraries("libdw", self.prefix, recursive=True)
+            + find_libraries("libasm", self.prefix, recursive=True)
+        )
+
+    executables = [
+        "^eu-{0}$".format(re.escape(exe))
+        for exe in [
+            "addr2line",
+            "ar",
+            "elfclassify",
+            "elfcmp",
+            "elfcompress",
+            "elflint",
+            "findtextrel",
+            "make-debug-archive",
+            "nm",
+            "objdump",
+            "ranlib",
+            "readelf",
+            "size",
+            "stack",
+            "strings",
+            "strip",
+            "unstrip",
+        ]
+    ]
+
+    _version_pattern = re.compile(r"^eu-[a-z0-9]+\s+\(elfutils\)\s+([^\s]+)$", flags=re.MULTILINE)
+
+    @classmethod
+    def determine_version(cls, exe):
+        output = Executable(exe)("--version", output=str, error=str)
+        m = re.search(cls._version_pattern, output)
+        return m.group(1) if m else None
