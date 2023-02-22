@@ -3,6 +3,8 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import re
+
 from spack.package import *
 
 
@@ -134,3 +136,28 @@ class Gtkplus(MesonPackage):
     def check(self):
         """All build time checks open windows in the X server, don't do that"""
         pass
+
+    @property
+    def libs(self):
+        if self.spec.satisfies("@2"):
+            return (
+                find_libraries("libgailutil", self.prefix, recursive=True)
+                + find_libraries("libgdk-*-2.0", self.prefix, recursive=True)
+                + find_libraries("libgtk-*-2.0", self.prefix, recursive=True)
+            )
+        else:
+            assert self.spec.satisfies("@3")
+            return (
+                find_libraries("libgailutil-3", self.prefix, recursive=True)
+                + find_libraries("libgdk-3", self.prefix, recursive=True)
+                + find_libraries("libgtk-3", self.prefix, recursive=True)
+            )
+
+    executables = ["^broadwayd$", "^gtk-launch$", "^gtk-query-immodules", "^gtk-query-settings$"]
+
+    _immodules_exe_version_pattern = re.compile(r"gtk-query-immodules-([0-9\.]+)$")
+
+    @classmethod
+    def determine_version(cls, exe):
+        m = cls._immodules_exe_version_pattern.search(exe)
+        return m.group(1) if m else None
