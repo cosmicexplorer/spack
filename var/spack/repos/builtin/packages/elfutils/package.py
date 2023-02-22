@@ -18,7 +18,7 @@ class Elfutils(AutotoolsPackage, SourcewarePackage):
     tools that are distributed with the Red Hat Developer Toolset
     version of elfutils."""
 
-    homepage = "https://fedorahosted.org/elfutils/"
+    homepage = "https://sourceware.org/elfutils/"
     sourceware_mirror_path = "elfutils/0.179/elfutils-0.179.tar.bz2"
     list_url = "https://sourceware.org/elfutils/ftp"
     list_depth = 1
