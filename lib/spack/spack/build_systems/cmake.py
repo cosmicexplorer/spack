@@ -420,7 +420,10 @@ class CMakeBuilder(BaseBuilder):
         options += self.cmake_args()
         options.append(os.path.abspath(self.root_cmakelists_dir))
         with fs.working_dir(self.build_directory, create=True):
-            inspect.getmodule(self.pkg).cmake(*options)
+            if self.spec.satisfies("%emscripten"):
+                inspect.getmodule(self.pkg).emcmake(*options)
+            else:
+                inspect.getmodule(self.pkg).cmake(*options)
 
     def build(self, pkg, spec, prefix):
         """Make the build targets"""
