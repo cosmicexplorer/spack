@@ -2,17 +2,22 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
-from spack_repo.builtin.build_systems.cmake import CMakePackage
+from spack_repo.builtin.build_systems.cmake import CMakePackage, MakefilePackage
 
 from spack.package import *
 
 
-class Re2(CMakePackage):
+class Re2(MakefilePackage, CMakePackage):
     """RE2 is a fast, safe, thread-friendly alternative to backtracking
     regular expression engines like those used in PCRE, Perl, and Python."""
 
+    build_system(conditional("cmake", when="@:2021-06-01"), "makefile", default="makefile")
+
     homepage = "https://github.com/google/re2"
     url = "https://github.com/google/re2/archive/2020-08-01.tar.gz"
+    git = "https://github.com/google/re2.git"
+
+    maintainers("cosmicexplorer")
 
     license("BSD-3-Clause", checked_by="wdconinc")
 
@@ -68,8 +73,9 @@ class Re2(CMakePackage):
     depends_on("googletest", type="test")
     depends_on("benchmark ~performance_counters", type="test")
 
-    # shared libs must have position-independent code
-    conflicts("+shared ~pic")
+    conflicts("+shared ~pic", msg="shared libs must have PIC code!")
+    conflicts("+pic ~shared build_system=makefile",
+              msg="the makefile build does not support static libs with PIC code!")
 
     def cmake_args(self):
         args = [
@@ -84,3 +90,19 @@ class Re2(CMakePackage):
         if abseil:
             args.append(self.define("CMAKE_CXX_STANDARD", abseil[0].variants["cxxstd"].value))
         return args
+
+    @when("build_system=makefile")
+    def patch(self):
+        filter_file("prefix=/usr/local", "prefix={}".format(self.prefix), "Makefile", string=True)
+
+    @property
+    def build_targets(self):
+        if '+shared' in self.spec:
+            return ["shared"]
+        return ["static"]
+
+    @property
+    def install_targets(self):
+        if '+shared' in self.spec:
+            return ["shared-install"]
+        return ["static-install"]
