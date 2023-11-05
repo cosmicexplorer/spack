@@ -26,6 +26,10 @@ class Hyperscan(CMakePackage):
 
     homepage = "https://www.hyperscan.io/"
     url = "https://github.com/intel/hyperscan/archive/v5.2.1.tar.gz"
+    git = "https://github.com/intel/hyperscan.git"
+    list_url = "https://github.com/intel/hyperscan/releases"
+
+    version("v5.4.2", tag="v5.4.2")
 
     license("BSD-2-Clause")
 
