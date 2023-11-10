@@ -1,0 +1,57 @@
+diff --git a/re2/re2.cc b/re2/re2.cc
+index 61d9d1f..2bcbc59 100644
+--- a/re2/re2.cc
++++ b/re2/re2.cc
+@@ -197,11 +197,15 @@ int RE2::Options::ParseFlags() const {
+   return flags;
+ }
+ 
+-void RE2::Init(absl::string_view pattern, const Options& options) {
++absl::string_view RE2::pattern_view() const { return *pattern_; }
++
++absl::string_view RE2::error_view() const { return *error_; }
++
++absl::string_view RE2::error_arg_view() const { return *error_arg_; }
++
++void RE2::Init(absl::string_view pattern, const Options &options) {
+   static absl::once_flag empty_once;
+-  absl::call_once(empty_once, []() {
+-    (void) new (empty_storage) EmptyStorage;
+-  });
++  absl::call_once(empty_once, []() { (void)new (empty_storage) EmptyStorage; });
+ 
+   pattern_ = new std::string(pattern);
+   options_.Copy(options);
+diff --git a/re2/re2.h b/re2/re2.h
+index 68fbed1..e8e7678 100644
+--- a/re2/re2.h
++++ b/re2/re2.h
+@@ -307,11 +307,15 @@ class RE2 {
+   // The string specification for this RE2.  E.g.
+   //   RE2 re("ab*c?d+");
+   //   re.pattern();    // "ab*c?d+"
+-  const std::string& pattern() const { return *pattern_; }
++  const std::string &pattern() const { return *pattern_; }
++
++  absl::string_view pattern_view() const;
+ 
+   // If RE2 could not be created properly, returns an error string.
+   // Else returns the empty string.
+-  const std::string& error() const { return *error_; }
++  const std::string &error() const { return *error_; }
++
++  absl::string_view error_view() const;
+ 
+   // If RE2 could not be created properly, returns an error code.
+   // Else returns RE2::NoError (== 0).
+@@ -319,7 +323,9 @@ class RE2 {
+ 
+   // If RE2 could not be created properly, returns the offending
+   // portion of the regexp.
+-  const std::string& error_arg() const { return *error_arg_; }
++  const std::string &error_arg() const { return *error_arg_; }
++
++  absl::string_view error_arg_view() const;
+ 
+   // Returns the program size, a very approximate measure of a regexp's "cost".
+   // Larger numbers are more expensive than smaller numbers.
