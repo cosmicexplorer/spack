@@ -1,0 +1,70 @@
+diff --git a/re2/re2.cc b/re2/re2.cc
+index 61d9d1f..a078746 100644
+--- a/re2/re2.cc
++++ b/re2/re2.cc
+@@ -197,11 +197,30 @@ int RE2::Options::ParseFlags() const {
+   return flags;
+ }
+ 
+-void RE2::Init(absl::string_view pattern, const Options& options) {
++const char *RE2::pattern_c() {
++  if (pattern_ == NULL) {
++    return NULL;
++  }
++  return pattern_->c_str();
++}
++
++const char *RE2::error_c() {
++  if (error_ == NULL) {
++    return NULL;
++  }
++  return error_->c_str();
++}
++
++const char *RE2::error_arg_c() {
++  if (error_arg_ == NULL) {
++    return NULL;
++  }
++  return error_arg_->c_str();
++}
++
++void RE2::Init(absl::string_view pattern, const Options &options) {
+   static absl::once_flag empty_once;
+-  absl::call_once(empty_once, []() {
+-    (void) new (empty_storage) EmptyStorage;
+-  });
++  absl::call_once(empty_once, []() { (void)new (empty_storage) EmptyStorage; });
+ 
+   pattern_ = new std::string(pattern);
+   options_.Copy(options);
+diff --git a/re2/re2.h b/re2/re2.h
+index 68fbed1..bc3956d 100644
+--- a/re2/re2.h
++++ b/re2/re2.h
+@@ -307,12 +307,16 @@ class RE2 {
+   // The string specification for this RE2.  E.g.
+   //   RE2 re("ab*c?d+");
+   //   re.pattern();    // "ab*c?d+"
+-  const std::string& pattern() const { return *pattern_; }
++  const std::string &pattern() const { return *pattern_; }
++
++  const char* pattern_c();
+ 
+   // If RE2 could not be created properly, returns an error string.
+   // Else returns the empty string.
+   const std::string& error() const { return *error_; }
+ 
++  const char* error_c();
++
+   // If RE2 could not be created properly, returns an error code.
+   // Else returns RE2::NoError (== 0).
+   ErrorCode error_code() const { return error_code_; }
+@@ -321,6 +325,8 @@ class RE2 {
+   // portion of the regexp.
+   const std::string& error_arg() const { return *error_arg_; }
+ 
++  const char* error_arg_c();
++
+   // Returns the program size, a very approximate measure of a regexp's "cost".
+   // Larger numbers are more expensive than smaller numbers.
+   int ProgramSize() const;
