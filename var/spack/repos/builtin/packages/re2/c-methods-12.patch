@@ -1,0 +1,146 @@
+diff --git a/re2/re2.cc b/re2/re2.cc
+index 61d9d1f..95e27aa 100644
+--- a/re2/re2.cc
++++ b/re2/re2.cc
+@@ -36,6 +36,31 @@
+ #include "re2/sparse_array.h"
+ 
+ namespace re2 {
++StringWrapper::StringWrapper() : inner_() {}
++StringWrapper::StringWrapper(const char *s) : inner_(s) {}
++StringWrapper::StringWrapper(const std::string &s) : inner_(s) {}
++StringWrapper::StringWrapper(std::string &&s) : inner_(s) {}
++StringWrapper::StringWrapper(absl::string_view s) : inner_(s) {}
++
++StringWrapper::~StringWrapper() {}
++
++absl::string_view StringWrapper::view() const { return inner_; }
++
++std::string *StringWrapper::get_mutable() { return &inner_; }
++
++GroupNames::GroupNames(const std::map<std::string, int> &m) : names_(m.size()) {
++  for (const auto &n : m) {
++    assert(n.second >= 0);
++    assert(n.second < m.size());
++    names_[n.second] = n.first;
++  }
++}
++GroupNames::~GroupNames() {}
++
++size_t GroupNames::len() const { return names_.size(); }
++absl::string_view GroupNames::get_name(size_t i) const {
++  return names_.at(i).view();
++}
+ 
+ // Controls the maximum count permitted by GlobalReplace(); -1 is unlimited.
+ static int maximum_global_replace_count = -1;
+@@ -197,11 +222,15 @@ int RE2::Options::ParseFlags() const {
+   return flags;
+ }
+ 
+-void RE2::Init(absl::string_view pattern, const Options& options) {
++absl::string_view RE2::pattern_view() const { return *pattern_; }
++
++absl::string_view RE2::error_view() const { return *error_; }
++
++absl::string_view RE2::error_arg_view() const { return *error_arg_; }
++
++void RE2::Init(absl::string_view pattern, const Options &options) {
+   static absl::once_flag empty_once;
+-  absl::call_once(empty_once, []() {
+-    (void) new (empty_storage) EmptyStorage;
+-  });
++  absl::call_once(empty_once, []() { (void)new (empty_storage) EmptyStorage; });
+ 
+   pattern_ = new std::string(pattern);
+   options_.Copy(options);
+@@ -381,6 +410,11 @@ int RE2::ReverseProgramFanout(std::vector<int>* histogram) const {
+   return Fanout(prog, histogram);
+ }
+ 
++GroupNames RE2::CapturingGroupNamesW() const {
++  GroupNames ret(NamedCapturingGroups());
++  return ret;
++}
++
+ // Returns named_groups_, computing it if needed.
+ const std::map<std::string, int>& RE2::NamedCapturingGroups() const {
+   absl::call_once(named_groups_once_, [](const RE2* re) {
+diff --git a/re2/re2.h b/re2/re2.h
+index 68fbed1..584c209 100644
+--- a/re2/re2.h
++++ b/re2/re2.h
+@@ -227,7 +227,33 @@
+ namespace re2 {
+ class Prog;
+ class Regexp;
+-}  // namespace re2
++
++class StringWrapper {
++public:
++  StringWrapper();
++  StringWrapper(const char *s);
++  StringWrapper(const std::string& s);
++  StringWrapper(std::string&& s);
++  StringWrapper(absl::string_view s);
++  ~StringWrapper();
++  absl::string_view view() const;
++  std::string *get_mutable();
++
++private:
++  std::string inner_;
++};
++
++class GroupNames {
++public:
++  GroupNames(const std::map<std::string, int> &m);
++  ~GroupNames();
++  size_t len() const;
++  absl::string_view get_name(size_t i) const;
++
++private:
++  std::vector<StringWrapper> names_;
++};
++} // namespace re2
+ 
+ namespace re2 {
+ 
+@@ -307,11 +333,15 @@ class RE2 {
+   // The string specification for this RE2.  E.g.
+   //   RE2 re("ab*c?d+");
+   //   re.pattern();    // "ab*c?d+"
+-  const std::string& pattern() const { return *pattern_; }
++  const std::string &pattern() const { return *pattern_; }
++
++  absl::string_view pattern_view() const;
+ 
+   // If RE2 could not be created properly, returns an error string.
+   // Else returns the empty string.
+-  const std::string& error() const { return *error_; }
++  const std::string &error() const { return *error_; }
++
++  absl::string_view error_view() const;
+ 
+   // If RE2 could not be created properly, returns an error code.
+   // Else returns RE2::NoError (== 0).
+@@ -319,7 +349,9 @@ class RE2 {
+ 
+   // If RE2 could not be created properly, returns the offending
+   // portion of the regexp.
+-  const std::string& error_arg() const { return *error_arg_; }
++  const std::string &error_arg() const { return *error_arg_; }
++
++  absl::string_view error_arg_view() const;
+ 
+   // Returns the program size, a very approximate measure of a regexp's "cost".
+   // Larger numbers are more expensive than smaller numbers.
+@@ -552,7 +584,8 @@ class RE2 {
+   // The map records the index of the leftmost group
+   // with the given name.
+   // Only valid until the re is deleted.
+-  const std::map<std::string, int>& NamedCapturingGroups() const;
++  const std::map<std::string, int> &NamedCapturingGroups() const;
++  GroupNames CapturingGroupNamesW() const;
+ 
+   // Return a map from capturing indices to names.
+   // The map has no entries for unnamed groups.
