@@ -1,0 +1,150 @@
+diff --git a/re2/re2.cc b/re2/re2.cc
+index 61d9d1f..2f1c850 100644
+--- a/re2/re2.cc
++++ b/re2/re2.cc
+@@ -36,6 +36,41 @@
+ #include "re2/sparse_array.h"
+ 
+ namespace re2 {
++StringWrapper::StringWrapper() : inner_() {}
++StringWrapper::StringWrapper(absl::string_view s) : inner_(s) {}
++StringWrapper::StringWrapper(std::string &&s) : inner_(s) {}
++
++StringWrapper &StringWrapper::operator=(absl::string_view s) {
++  inner_ = std::string(s);
++  return *this;
++}
++StringWrapper &StringWrapper::operator=(std::string &&s) {
++  inner_ = s;
++  return *this;
++}
++
++StringWrapper::~StringWrapper() {}
++
++absl::string_view StringWrapper::view() const { return inner_; }
++
++std::string *StringWrapper::get_mutable() { return &inner_; }
++
++GroupNames::GroupNames(const std::map<std::string, int> &m) : names_() {
++  for (const auto &n : m) {
++    assert(n.second > 0);
++    const size_t n2 = n.second;
++    if (n2 + 1 > names_.size()) {
++      names_.resize(n2 + 1);
++    }
++    names_[n2] = n.first;
++  }
++}
++GroupNames::~GroupNames() {}
++
++size_t GroupNames::len() const { return names_.size(); }
++absl::string_view GroupNames::get_name(size_t i) const {
++  return names_.at(i).view();
++}
+ 
+ // Controls the maximum count permitted by GlobalReplace(); -1 is unlimited.
+ static int maximum_global_replace_count = -1;
+diff --git a/re2/re2.h b/re2/re2.h
+index 68fbed1..5f20061 100644
+--- a/re2/re2.h
++++ b/re2/re2.h
+@@ -227,7 +227,36 @@
+ namespace re2 {
+ class Prog;
+ class Regexp;
+-}  // namespace re2
++
++class StringWrapper {
++public:
++  StringWrapper();
++  StringWrapper(absl::string_view s);
++  StringWrapper(std::string&& s);
++
++  StringWrapper &operator=(absl::string_view s);
++  StringWrapper &operator=(std::string&& s);
++
++  ~StringWrapper();
++
++  absl::string_view view() const;
++  std::string *get_mutable();
++
++private:
++  std::string inner_;
++};
++
++class GroupNames {
++public:
++  GroupNames(const std::map<std::string, int> &m);
++  ~GroupNames();
++  size_t len() const;
++  absl::string_view get_name(size_t i) const;
++
++private:
++  std::vector<StringWrapper> names_;
++};
++} // namespace re2
+ 
+ namespace re2 {
+ 
+diff --git a/re2/testing/re2_test.cc b/re2/testing/re2_test.cc
+index 151525f..ee7795f 100644
+--- a/re2/testing/re2_test.cc
++++ b/re2/testing/re2_test.cc
+@@ -1658,4 +1658,56 @@ TEST(RE2, Issue310) {
+   ASSERT_EQ(m, "") << " got m='" << m << "', want ''";
+ }
+ 
+-}  // namespace re2
++TEST(RE2, StringWrapper) {
++  // We can use StringWrapper to wrap std::string.
++
++  StringWrapper s;
++
++  ASSERT_EQ(s.view(), "");
++
++  *s.get_mutable() = "asdf";
++  ASSERT_EQ(s.view(), "asdf");
++}
++
++TEST(RE2, GroupNames) {
++  // We can generate group names.
++
++  RE2 no_groups("asdf");
++  RE2 num_group("(a)sdf");
++  RE2 named_group("(?P<foo>a)sdf");
++  RE2 mixed_groups("(?P<foo>a)s(d)f");
++
++  ASSERT_TRUE(RE2::FullMatch("asdf", no_groups));
++  GroupNames g1(no_groups.NamedCapturingGroups());
++  ASSERT_EQ(0, g1.len());
++
++  std::string s;
++
++  ASSERT_TRUE(RE2::FullMatch("asdf", num_group, &s));
++  ASSERT_EQ("a", s);
++  s.clear();
++  GroupNames g2(num_group.NamedCapturingGroups());
++  ASSERT_EQ(0, g2.len());
++
++  ASSERT_TRUE(RE2::FullMatch("asdf", named_group, &s));
++  ASSERT_EQ("a", s);
++  s.clear();
++
++  const auto &m3 = named_group.NamedCapturingGroups();
++  ASSERT_EQ(1, m3.size());
++  ASSERT_EQ(1, m3.at("foo"));
++
++  GroupNames g3(named_group.NamedCapturingGroups());
++  ASSERT_EQ(2, g3.len());
++  ASSERT_EQ("foo", g3.get_name(1));
++
++  const auto &m4 = mixed_groups.NamedCapturingGroups();
++  ASSERT_EQ(1, m4.size());
++  ASSERT_EQ(1, m4.at("foo"));
++
++  GroupNames g4(named_group.NamedCapturingGroups());
++  ASSERT_EQ(2, g4.len());
++  ASSERT_EQ("foo", g4.get_name(1));
++}
++
++} // namespace re2
