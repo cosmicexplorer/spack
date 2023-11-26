@@ -1,0 +1,110 @@
+diff --git a/src/hs_runtime.h b/src/hs_runtime.h
+index 6d34b6c..2d9d32d 100644
+--- a/src/hs_runtime.h
++++ b/src/hs_runtime.h
+@@ -232,6 +232,18 @@ hs_error_t HS_CDECL hs_scan_stream(hs_stream_t *id, const char *data,
+ hs_error_t HS_CDECL hs_close_stream(hs_stream_t *id, hs_scratch_t *scratch,
+                                     match_event_handler onEvent, void *ctxt);
+ 
++hs_error_t HS_CDECL hs_direct_flush_stream(hs_stream_t *id,
++                                           hs_scratch_t *scratch,
++                                           match_event_handler onEvent,
++                                           void *ctxt);
++
++hs_error_t HS_CDECL hs_direct_free_stream(hs_stream_t *id);
++
++hs_error_t HS_CDECL hs_direct_reset_stream(hs_stream_t *id);
++
++hs_error_t HS_CDECL hs_direct_reset_and_copy_stream(hs_stream_t *to_id,
++                                                    const hs_stream_t *from_id);
++
+ /**
+  * Reset a stream to an initial state.
+  *
+diff --git a/src/runtime.c b/src/runtime.c
+index a055e5f..6d026fd 100644
+--- a/src/runtime.c
++++ b/src/runtime.c
+@@ -995,6 +995,82 @@ hs_error_t HS_CDECL hs_scan_stream(hs_stream_t *id, const char *data,
+     return rv;
+ }
+ 
++HS_PUBLIC_API
++hs_error_t HS_CDECL hs_direct_flush_stream(hs_stream_t *id,
++                                           hs_scratch_t *scratch,
++                                           match_event_handler onEvent,
++                                           void *context) {
++    if (!id) {
++        return HS_INVALID;
++    }
++
++    if (onEvent) {
++        if (!scratch || !validScratch(id->rose, scratch)) {
++            return HS_INVALID;
++        }
++        if (unlikely(markScratchInUse(scratch))) {
++            return HS_SCRATCH_IN_USE;
++        }
++        report_eod_matches(id, scratch, onEvent, context);
++        if (unlikely(internal_matching_error(scratch))) {
++            unmarkScratchInUse(scratch);
++            /* hs_stream_free(id); */
++            return HS_UNKNOWN_ERROR;
++        }
++        unmarkScratchInUse(scratch);
++    }
++
++    /* hs_stream_free(id); */
++
++    return HS_SUCCESS;
++}
++
++HS_PUBLIC_API
++hs_error_t HS_CDECL hs_direct_free_stream(hs_stream_t *id) {
++    if (!id) {
++        return HS_INVALID;
++    }
++
++    hs_stream_free(id);
++
++    return HS_SUCCESS;
++}
++
++HS_PUBLIC_API
++hs_error_t HS_CDECL hs_direct_reset_stream(hs_stream_t *id) {
++    if (!id) {
++        return HS_INVALID;
++    }
++
++    // history already initialised
++    init_stream(id, id->rose, 0);
++
++    return HS_SUCCESS;
++}
++
++HS_PUBLIC_API
++hs_error_t HS_CDECL hs_direct_reset_and_copy_stream(
++    hs_stream_t *to_id, const hs_stream_t *from_id) {
++    if (!from_id || !from_id->rose) {
++        return HS_INVALID;
++    }
++
++    if (!to_id || to_id->rose != from_id->rose) {
++        return HS_INVALID;
++    }
++
++    if (to_id == from_id) {
++        return HS_INVALID;
++    }
++
++    size_t stateSize =
++        sizeof(struct hs_stream) + from_id->rose->stateOffsets.end;
++
++    memcpy(to_id, from_id, stateSize);
++
++    return HS_SUCCESS;
++}
++
+ HS_PUBLIC_API
+ hs_error_t HS_CDECL hs_close_stream(hs_stream_t *id, hs_scratch_t *scratch,
+                                     match_event_handler onEvent,
