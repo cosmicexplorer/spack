@@ -77,8 +77,6 @@ class Re2(MakefilePackage, CMakePackage):
     conflicts("+pic ~shared build_system=makefile",
               msg="the makefile build does not support static libs with PIC code!")
 
-    patch("c-methods-16.patch")
-
     def cmake_args(self):
         args = [
             self.define_from_variant("RE2_USE_ICU", "icu"),
