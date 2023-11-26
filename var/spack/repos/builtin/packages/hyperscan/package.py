@@ -42,3 +42,5 @@ class Hyperscan(CMakePackage):
     depends_on("boost+exception+serialization+random+graph+container")
     depends_on("pcre")
     depends_on("ragel", type="build")
+
+    patch("native-stream-api.patch")
