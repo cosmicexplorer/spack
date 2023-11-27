@@ -1,3 +1,54 @@
+diff --git a/hs.def b/hs.def
+index 28f7877..f2e98d1 100644
+--- a/hs.def
++++ b/hs.def
+@@ -15,6 +15,10 @@ EXPORTS
+    hs_database_size
+    hs_deserialize_database
+    hs_deserialize_database_at
++   hs_direct_flush_stream
++   hs_direct_free_stream
++   hs_direct_reset_and_copy_stream
++   hs_direct_reset_stream
+    hs_expand_stream
+    hs_expression_ext_info
+    hs_expression_info
+diff --git a/hs_runtime.def b/hs_runtime.def
+index 6c434be..2539cb6 100644
+--- a/hs_runtime.def
++++ b/hs_runtime.def
+@@ -12,6 +12,10 @@ EXPORTS
+    hs_database_size
+    hs_deserialize_database
+    hs_deserialize_database_at
++   hs_direct_flush_stream
++   hs_direct_free_stream
++   hs_direct_reset_and_copy_stream
++   hs_direct_reset_stream
+    hs_expand_stream
+    hs_free_database
+    hs_free_scratch
+diff --git a/src/dispatcher.c b/src/dispatcher.c
+index 9a8afa6..bc2940d 100644
+--- a/src/dispatcher.c
++++ b/src/dispatcher.c
+@@ -103,6 +103,16 @@ CREATE_DISPATCH(hs_error_t, hs_scan_stream, hs_stream_t *id, const char *data,
+ CREATE_DISPATCH(hs_error_t, hs_close_stream, hs_stream_t *id,
+                 hs_scratch_t *scratch, match_event_handler onEvent, void *ctxt);
+ 
++CREATE_DISPATCH(hs_error_t, hs_direct_flush_stream, hs_stream_t *id,
++                hs_scratch_t *scratch, match_event_handler onEvent, void *ctxt);
++
++CREATE_DISPATCH(hs_error_t, hs_direct_free_stream, hs_stream_t *id);
++
++CREATE_DISPATCH(hs_error_t, hs_direct_reset_stream, hs_stream_t *id);
++
++CREATE_DISPATCH(hs_error_t, hs_direct_reset_and_copy_stream, hs_stream_t *to_id,
++                const hs_stream_t *from_id);
++
+ CREATE_DISPATCH(hs_error_t, hs_scan_vector, const hs_database_t *db,
+                 const char *const *data, const unsigned int *length,
+                 unsigned int count, unsigned int flags, hs_scratch_t *scratch,
 diff --git a/src/hs_runtime.h b/src/hs_runtime.h
 index 6d34b6c..2d9d32d 100644
 --- a/src/hs_runtime.h
