@@ -41,4 +41,4 @@ class Hyperscan(CMakePackage):
     depends_on("pcre")
     depends_on("ragel", type="build")
 
-    patch("native-stream-api.patch")
+    patch("native-stream-api-2.patch")
