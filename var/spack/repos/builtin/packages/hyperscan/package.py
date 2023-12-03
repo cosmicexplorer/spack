@@ -38,7 +38,37 @@ class Hyperscan(CMakePackage):
             version(ver, sha256=pkg[0], url=pkg[1])
 
     depends_on("boost+exception+serialization+random+graph+container")
-    depends_on("pcre")
+    depends_on("pcre@8.41+utf", when="+chimera")
     depends_on("ragel", type="build")
 
+    variant("chimera", default=False, description="Build the chimera PCRE compat library.")
+    variant("shared", default=False, description="Build shared libs")
+    variant("static", default=True, description="Build static libs"),
+    conflicts("~shared~static", msg="must build shared and/or static libs!")
+    conflicts("+chimera+shared", msg="chimera does not allow shared libs!")
+
+    # TODO: FAT_RUNTIME flag!
+
     patch("native-stream-api-2.patch")
+
+    def cmake_args(self):
+        args = []
+        if '+chimera' in self.spec:
+            pcre_stage = self.spec['pcre'].package.stage[0]
+            pcre_stage.create()
+            pcre_stage.fetch()
+            pcre_stage.expand_archive()
+            args.extend([
+                self.define("PCRE_SOURCE", pcre_stage.source_path),
+                self.define("BUILD_CHIMERA", "TRUE"),
+            ])
+
+        if '+shared+static' in self.spec:
+            args.append(self.define("BUILD_STATIC_AND_SHARED", "ON"))
+        elif '+shared' in self.spec:
+            args.append(self.define("BUILD_SHARED_LIBS", "ON"))
+        else:
+            assert '+static' in self.spec
+            args.append(self.define("BUILD_STATIC_LIBS", "ON"))
+
+        return args
