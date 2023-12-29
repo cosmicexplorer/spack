@@ -31,7 +31,7 @@ class Hyperscan(CMakePackage):
 
     version("v5.4.2", tag="v5.4.2")
 
-    license("BSD-2-Clause")
+    license("BSD-3-Clause")
 
     for ver, packages in _versions.items():
         key = "{0}-{1}".format(platform.system(), platform.machine())
