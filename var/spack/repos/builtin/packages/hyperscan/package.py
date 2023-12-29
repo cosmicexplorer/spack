@@ -51,7 +51,7 @@ class Hyperscan(CMakePackage):
 
     # TODO: FAT_RUNTIME flag!
 
-    patch("native-stream-api-2.patch")
+    patch("native-stream-api-3.patch")
 
     def cmake_args(self):
         args = []
