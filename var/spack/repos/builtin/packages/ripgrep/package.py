@@ -13,11 +13,14 @@ class Ripgrep(CargoPackage):
     """
 
     homepage = "https://github.com/BurntSushi/ripgrep"
+    git = "https://github.com/BurntSushi/ripgrep"
     url = "https://github.com/BurntSushi/ripgrep/archive/11.0.2.tar.gz"
 
     maintainers("alecbcs")
 
     license("MIT OR Unlicense")
+
+    depends_on("rs-regex-automata")
 
     version("14.1.0", sha256="33c6169596a6bbfdc81415910008f26e0809422fda2d849562637996553b2ab6")
     version("14.0.3", sha256="f5794364ddfda1e0411ab6cad6dd63abe3a6b421d658d9fee017540ea4c31a0e")
