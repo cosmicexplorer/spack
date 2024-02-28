@@ -2,7 +2,8 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
-from spack_repo.builtin.build_systems.cmake import CMakePackage, MakefilePackage
+from spack_repo.builtin.build_systems.cmake import CMakePackage
+from spack_repo.builtin.build_systems.makefile import MakefilePackage
 
 from spack.package import *
 
@@ -20,6 +21,8 @@ class Re2(MakefilePackage, CMakePackage):
     maintainers("cosmicexplorer")
 
     license("BSD-3-Clause", checked_by="wdconinc")
+
+    version("main", branch="main")
 
     version(
         "2024-07-02", sha256="eb2df807c781601c14a260a507a5bb4509be1ee626024cb45acbd57cb9d4032b"
@@ -63,10 +66,12 @@ class Re2(MakefilePackage, CMakePackage):
     )
     variant("shared", default=False, description="Build shared instead of static libraries")
     variant("pic", default=True, description="Enable position independent code")
+    variant("coro", default=False, description="Enable the C++20 coroutine API")
 
     depends_on("cxx", type="build")
 
     depends_on("abseil-cpp", when="@2023-09-01:")
+    depends_on("cppcoro@develop", when="+coro")
 
     depends_on("icu4c", when="+icu")
 
@@ -83,6 +88,7 @@ class Re2(MakefilePackage, CMakePackage):
             self.define_from_variant("BUILD_SHARED_LIBS", "shared"),
             self.define_from_variant("CMAKE_POSITION_INDEPENDENT_CODE", "pic"),
             self.define("RE2_BUILD_TESTING", self.run_tests),
+            self.define_from_variant("RE2_USE_CPPCORO", "coro"),
         ]
 
         abseil = self.spec.dependencies("abseil-cpp")

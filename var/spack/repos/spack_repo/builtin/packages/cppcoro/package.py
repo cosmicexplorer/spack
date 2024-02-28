@@ -17,7 +17,7 @@ class Cppcoro(CMakePackage):
 
     license("MIT")
 
-    version("develop", branch="master")
+    version("develop", branch="main")
     version("2021-01-13", commit="7cc9433436fe8f2482138019cfaafce8e1d7a896")
 
     depends_on("cxx", type="build")  # generated

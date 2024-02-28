@@ -49,7 +49,7 @@ class Hyperscan(CMakePackage):
 
     variant("chimera", default=False, description="Build the chimera PCRE compat library.")
     variant("shared", default=False, description="Build shared libs")
-    variant("static", default=True, description="Build static libs"),
+    variant("static", default=True, description="Build static libs")
     conflicts("~shared~static", msg="must build shared and/or static libs!")
     conflicts("+chimera+shared", msg="chimera does not allow shared libs!")
 
