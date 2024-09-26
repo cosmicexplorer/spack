@@ -37,7 +37,7 @@ jobs:
               make patch unzip which xz python3 python3-devel tree \
               cmake bison
       - name: Checkout
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938
         with:
           fetch-depth: 0
       - name: Bootstrap clingo
@@ -60,7 +60,7 @@ jobs:
         run: |
           brew install cmake bison tree
       - name: Checkout
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938
         with:
           fetch-depth: 0
       - uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f
@@ -96,7 +96,7 @@ jobs:
         if: ${{ matrix.runner == 'ubuntu-latest' }}
         run: sudo rm -rf $(command -v gpg gpg2 patchelf)
       - name: Checkout
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938
         with:
           fetch-depth: 0
       - name: Bootstrap GnuPG
@@ -125,7 +125,7 @@ jobs:
         run: |
           sudo rm -rf $(which gpg) $(which gpg2) $(which patchelf)
       - name: Checkout
-        uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938
         with:
           fetch-depth: 0
       - uses: actions/setup-python@39cd14951b08e74b54015e9e001cdefcf80e669f
