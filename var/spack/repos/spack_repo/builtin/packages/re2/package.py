@@ -3,16 +3,13 @@
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
 from spack_repo.builtin.build_systems.cmake import CMakePackage
-from spack_repo.builtin.build_systems.makefile import MakefilePackage
 
 from spack.package import *
 
 
-class Re2(MakefilePackage, CMakePackage):
+class Re2(CMakePackage):
     """RE2 is a fast, safe, thread-friendly alternative to backtracking
     regular expression engines like those used in PCRE, Perl, and Python."""
-
-    build_system(conditional("cmake", when="@:2021-06-01"), "makefile", default="makefile")
 
     homepage = "https://github.com/google/re2"
     url = "https://github.com/google/re2/archive/2020-08-01.tar.gz"
@@ -66,12 +63,10 @@ class Re2(MakefilePackage, CMakePackage):
     )
     variant("shared", default=False, description="Build shared instead of static libraries")
     variant("pic", default=True, description="Enable position independent code")
-    variant("coro", default=False, description="Enable the C++20 coroutine API")
 
     depends_on("cxx", type="build")
 
     depends_on("abseil-cpp", when="@2023-09-01:")
-    depends_on("cppcoro@develop", when="+coro")
 
     depends_on("icu4c", when="+icu")
 
@@ -79,8 +74,6 @@ class Re2(MakefilePackage, CMakePackage):
     depends_on("benchmark ~performance_counters", type="test")
 
     conflicts("+shared ~pic", msg="shared libs must have PIC code!")
-    conflicts("+pic ~shared build_system=makefile",
-              msg="the makefile build does not support static libs with PIC code!")
 
     def cmake_args(self):
         args = [
@@ -88,7 +81,6 @@ class Re2(MakefilePackage, CMakePackage):
             self.define_from_variant("BUILD_SHARED_LIBS", "shared"),
             self.define_from_variant("CMAKE_POSITION_INDEPENDENT_CODE", "pic"),
             self.define("RE2_BUILD_TESTING", self.run_tests),
-            self.define_from_variant("RE2_USE_CPPCORO", "coro"),
         ]
 
         abseil = self.spec.dependencies("abseil-cpp")
@@ -96,19 +88,3 @@ class Re2(MakefilePackage, CMakePackage):
         if abseil:
             args.append(self.define("CMAKE_CXX_STANDARD", abseil[0].variants["cxxstd"].value))
         return args
-
-    @when("build_system=makefile")
-    def patch(self):
-        filter_file("prefix=/usr/local", "prefix={}".format(self.prefix), "Makefile", string=True)
-
-    @property
-    def build_targets(self):
-        if '+shared' in self.spec:
-            return ["shared"]
-        return ["static"]
-
-    @property
-    def install_targets(self):
-        if '+shared' in self.spec:
-            return ["shared-install"]
-        return ["static-install"]
