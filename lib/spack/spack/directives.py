@@ -45,12 +45,13 @@ import os
 import re
 import warnings
 from functools import partial
-from typing import Any, Callable, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, List, Optional, Tuple, Type, Union, Mapping, TypeVar
 
 import spack.deptypes as dt
 import spack.error
 import spack.fetch_strategy
 import spack.llnl.util.tty.color
+import spack.llnl.util.tty as tty
 import spack.package_base
 import spack.patch
 import spack.spec
@@ -60,10 +61,20 @@ from spack.dependency import Dependency
 from spack.directives_meta import DirectiveError, directive, get_spec
 from spack.resource import Resource
 from spack.spec import EMPTY_SPEC
-from spack.version import StandardVersion, VersionChecksumError, VersionError
+from spack.version import (
+    ConcreteVersion,
+    GitVersion,
+    StandardVersion,
+    Version,
+    VersionChecksumError,
+    VersionError,
+    VersionLookupError,
+)
+import spack.vendor.attrs as attrs
 
 __all__ = [
     "DirectiveError",
+    "VersionReferenceInfo",
     "version",
     "conditional",
     "conflicts",
@@ -153,7 +164,8 @@ def _make_when_spec(value: Union[WhenType, Tuple[str, ...]]) -> Optional[spack.s
 SubmoduleCallback = Callable[[spack.package_base.PackageBase], Union[str, List[str], bool]]
 
 
-@directive("versions", supports_when=False)
+# @directive("versions", supports_when=False)
+@directive(dicts=("versions", "version_infos"), supports_when=False)
 def version(
     ver: Union[str, int],
     # this positional argument is deprecated, use sha256=... instead
@@ -180,6 +192,8 @@ def version(
     commit: Optional[str] = None,
     tag: Optional[str] = None,
     branch: Optional[str] = None,
+    links_to: Optional[str] = None,
+    request_link: Optional[bool] = None,
     get_full_repo: Optional[bool] = None,
     git_sparse_paths: Optional[
         Union[List[str], Callable[[spack.package_base.PackageBase], List[str]]]
@@ -228,6 +242,8 @@ def version(
             ("submodules_delete", submodules_delete),
             ("commit", commit),
             ("tag", tag),
+            ("links_to", links_to),
+            ("request_link", request_link),
             ("revision", revision),
             ("date", date),
             ("md5", md5),
@@ -240,7 +256,95 @@ def version(
     return partial(_execute_version, ver=ver, kwargs=kwargs)
 
 
-def _execute_version(pkg: PackageType, ver: Union[str, int], kwargs: dict):
+_ArgType = TypeVar("_ArgType")
+
+
+@attrs.define(slots=True)
+class VersionReferenceInfo:
+    unique_name: ConcreteVersion
+    branch: Optional[str] = None
+    tag: Optional[str] = None
+    commit: Optional[str] = None
+    links_to: Optional[StandardVersion] = None
+    request_link: bool = False
+    processed_version: Optional[ConcreteVersion] = None
+
+    @staticmethod
+    def maybe_get_arg(
+        kw: Mapping[str, Any],
+        ty: Type[_ArgType],
+        name: str,
+    ) -> Optional[_ArgType]:
+        ret = kw.get(name, None)
+        if ret is not None and not isinstance(ret, ty):
+            raise TypeError(f"field {name!r} in kwargs {kwargs!r} was expected to be {ty!r}")
+        return ret
+
+    def interpret_kwargs(self, **kwargs: Any) -> None:
+        self.branch = self.__class__.maybe_get_arg(kwargs, str, 'branch')
+        self.tag = self.__class__.maybe_get_arg(kwargs, str, 'tag')
+        self.commit = self.__class__.maybe_get_arg(kwargs, str, 'commit')
+
+        links_to = kwargs.get('links_to', None)
+        if links_to is not None:
+            ver = Version(links_to)
+            assert isinstance(ver, StandardVersion), self
+            self.links_to = ver
+
+        self.request_link = bool(kwargs.get('request_link', None))
+
+    def process_version(self) -> None:
+        if self.request_link and self.links_to is not None:
+            raise VersionError(
+                f"request_link {self.request_link!r} and links_to {self.links_to!r} "
+                "cannot both be provided at once"
+            )
+        if self.request_link or self.links_to is not None:
+            if not any([self.branch, self.tag, self.commit]):
+                raise VersionError(
+                    f"request_link {self.request_link!r} or links_to {self.links_to!r} "
+                    "must be provided with a git branch, tag, or commit argument"
+                )
+
+        cur_version = self.unique_name
+
+        if self.tag is not None:
+            if isinstance(cur_version, GitVersion):
+                if cur_version.ref == self.tag:
+                    tty.debug(f"matching tag kwarg {self.tag!r} dropped")
+                elif cur_version.is_commit:
+                    cur_version.unshift_ref_arg(self.tag)
+                else:
+                    raise VersionError(
+                            f"tag kwarg {self.tag!r} cannot be merged "
+                            f"with the given git version {cur_version!r}"
+                        )
+            else:
+                cur_version = GitVersion(f"git.{self.tag}={cur_version}")
+        elif self.branch is not None:
+            if isinstance(cur_version, GitVersion):
+                if cur_version.ref == self.branch:
+                    tty.debug(f"matching branch kwarg {self.branch!r} dropped")
+                elif cur_version.is_commit:
+                    cur_version.unshift_ref_arg(self.branch)
+                else:
+                    raise VersionError("cannot figure out how to merge "
+                                       f"branch kwarg {self.branch!r} "
+                                       f"with git version {cur_version!r}")
+            else:
+                cur_version = GitVersion(f"git.{self.branch}={cur_version}")
+
+        if self.commit is not None:
+            if isinstance(cur_version, GitVersion):
+                cur_version.sha_to_verify = self.commit
+            else:
+                cur_version = GitVersion(f"git.{self.commit}={cur_version}")
+
+        self.processed_version = cur_version
+
+
+
+def _execute_version(pkg: PackageType, ver: Union[str, int], **kwargs) -> None:
     if (
         (any(s in kwargs for s in spack.util.crypto.hashes) or "checksum" in kwargs)
         and hasattr(pkg, "has_code")
@@ -255,7 +359,19 @@ def _execute_version(pkg: PackageType, ver: Union[str, int], kwargs: dict):
             f"{pkg.name}: declared version '{ver!r}' in package should be a string or int."
         )
 
-    version = StandardVersion.from_string(str(ver))
+    # Declared versions are concrete
+    version = Version(ver)
+    info = VersionReferenceInfo(version)
+    info.interpret_kwargs(**kwargs)
+    info.process_version()
+    pkg.version_infos[version] = info
+
+    if isinstance(version, GitVersion) and not hasattr(pkg, "git") and "git" not in kwargs:
+        args = ", ".join(f"{argname}='{value}'" for argname, value in kwargs.items())
+        raise VersionLookupError(
+            f"{pkg.name}: spack version directives cannot include git hashes fetched from URLs.\n"
+            f"    version('{ver}', {args})"
+        )
 
     # Store kwargs for the package to later with a fetch_strategy.
     pkg.versions[version] = kwargs

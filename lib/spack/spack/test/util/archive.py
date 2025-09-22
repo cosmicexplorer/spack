@@ -217,7 +217,7 @@ def test_get_commits_from_archive(mock_git_repository, tmp_path: Path, ref):
         )
         commit = retrieve_commit_from_archive(archive_file, ref)
         assert commit
-        assert spack.version.is_git_commit_sha(commit)
+        assert spack.version.is_git_commit_sha_like(commit)
 
 
 def test_can_tell_if_archive_has_git(mock_git_repository, tmp_path: Path):

@@ -125,6 +125,22 @@ You can do that by changing the value to either:
 * ``~/.spack/$spack_instance_id/cache`` for per-instance caches, or
 * ``~/.spack/$spack_short_version/cache`` for per-spack-version caches.
 
+``trace``
+---------
+
+???
+
+``git_cmd``
+-----------
+
+This is the file name or the absolute path for spack to execute when performing ``git`` commands. These executions are intended to be isolated from any user configuration you've provided for your own git repositories. This can be overridden to use a wrapper script which incorporates additional config options.
+
+If an executable filename is provided (as in the default value of ``git``), it will be dereference the value of ``$PATH`` visible to the spack process environment in order to transform this into an absolute path before attempting to execute it. Specifying the ``trace`` option will record this path resolution process. `Environment variables like $PATH <_env-vars-yaml>`_ can also be set in their own config scope to influence this process.
+
+``connect_timeout``
+-------------------
+If set to a non-zero number, file downloads will abort the remote connection after this many contiguous seconds which record zero data transfer progress. This will also exit the spack process with an exception and a nonzero exit code.
+
 ``verify_ssl``
 --------------------
 

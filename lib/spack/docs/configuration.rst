@@ -585,6 +585,8 @@ For example, to see the fully merged ``config.yaml``, you can type:
    $ spack config get config
    config:
      debug: false
+     trace: false
+     git_cmd: git
      checksum: true
      verify_ssl: true
      dirty: false

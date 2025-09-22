@@ -13,7 +13,7 @@ from typing import Callable, Dict, Generator, List, Tuple
 
 from spack.llnl.util import tty
 from spack.llnl.util.filesystem import readlink
-from spack.util.git import is_git_commit_sha
+from spack.util.git import is_git_commit_sha_like
 
 
 class ChecksumWriter(io.BufferedIOBase):
@@ -267,7 +267,7 @@ def retrieve_commit_from_archive(archive_path, ref):
                     break
             if f"{prefix}.git/HEAD" in names:
                 head = tar.extractfile(f"{prefix}.git/HEAD").read().decode("utf-8").strip()
-                if is_git_commit_sha(head):
+                if is_git_commit_sha_like(head):
                     # detached HEAD/ lightweight tag
                     return head
                 else:
@@ -276,7 +276,7 @@ def retrieve_commit_from_archive(archive_path, ref):
                     contents = (
                         tar.extractfile(f"{prefix}.git/{ref}").read().decode("utf-8").strip()
                     )
-                    if is_git_commit_sha(contents):
+                    if is_git_commit_sha_like(contents):
                         return contents
     except tarfile.ReadError:
         tty.warn(f"Archive {archive_path} does not appear to contain git data")

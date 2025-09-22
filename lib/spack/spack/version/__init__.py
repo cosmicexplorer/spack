@@ -17,7 +17,7 @@ from .common import (
     VersionError,
     VersionLookupError,
     infinity_versions,
-    is_git_commit_sha,
+    is_git_commit_sha_like,
     is_git_version,
 )
 from .version_types import (
@@ -56,7 +56,7 @@ __all__ = [
     "any_version",
     "from_string",
     "infinity_versions",
-    "is_git_commit_sha",
+    "is_git_commit_sha_like",
     "is_git_version",
     "ver",
 ]

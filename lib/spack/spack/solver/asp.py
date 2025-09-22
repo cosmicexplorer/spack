@@ -3846,7 +3846,7 @@ def _specs_with_commits(spec):
         f"Internal Error: {spec.name}'s assigned commit {spec.variants['commit'].value}"
         " does not meet commit syntax requirements."
     )
-    assert vn.is_git_commit_sha(spec.variants["commit"].value), invalid_commit_msg
+    assert vn.is_git_commit_sha_like(spec.variants["commit"].value), invalid_commit_msg
 
 
 def _ensure_external_path_if_external(spec: spack.spec.Spec) -> None:

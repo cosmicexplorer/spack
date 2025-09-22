@@ -7,13 +7,20 @@ import os
 import re
 import shutil
 import sys
-from typing import List, Optional, overload
+from functools import cached_property
+from pathlib import Path
+from typing import List, Optional, Union, overload, TYPE_CHECKING
 
-from spack.vendor.typing_extensions import Literal
+if TYPE_CHECKING:
+    from spack.vendor.typing_extensions import Literal, Self
+    from spack.version import StandardVersion
 
+import spack.config
+import spack.error
 import spack.llnl.util.filesystem as fs
 import spack.llnl.util.lang
-import spack.util.executable as exe
+import spack.llnl.util.tty as tty
+from spack.util.executable import CommandNotFoundError, ProcessError, Executable, which
 
 # regex for a commit version
 COMMIT_VERSION = re.compile(r"^[a-f0-9]{40}$")
@@ -22,39 +29,60 @@ COMMIT_VERSION = re.compile(r"^[a-f0-9]{40}$")
 GIT_VERSION = re.compile(r"(\d+(?:\.\d+)*)")
 
 
-def is_git_commit_sha(string: str) -> bool:
+def is_git_commit_sha_like(string: str) -> bool:
     return len(string) == 40 and bool(COMMIT_VERSION.match(string))
 
 
-@spack.llnl.util.lang.memoized
-def _find_git() -> Optional[str]:
-    """Find the git executable in the system path."""
-    return exe.which_string("git", required=False)
+class GitOrchestrationError(spack.error.SpackError):
+    """A class of errors which may occur when looking to achieve fine control over git remotes."""
 
+class GitInitializationFailure(GitOrchestrationError):
+    """Raised when an appropriate git binary could not be found at all."""
+    def __init__(self, name: str) -> None:
+        super().__init__(f'failure to initialize a git environment for binary name {name}')
 
-def extract_git_version_str(git_exe: exe.Executable) -> str:
-    match = re.search(GIT_VERSION, git_exe("--version", output=str))
-    return match.group(1) if match else ""
+class GitEnvironmentError(spack.error.SpackError):
+    """Raised to indicate that the process of git introspection could not ascertain
+    a minimum viable git environment."""
+    def __init__(self, exe: Executable, msg: str) -> None:
+        super().__init__(f'failure in git orchestration with binary {exe}: {msg}')
+        self.exe = exe
 
-
-class GitExecutable(exe.Executable):
+class GitExecutable:
     """Specialized executable that encodes the git version for optimized option selection"""
+    __slots__ = ('exe',)
 
-    def __init__(self, name=None):
-        if not name:
-            name = _find_git()
-        super().__init__(name)
-        self._version = None
+    # FIXME: trace!
+    def __init__(self, name: Optional[Union[str, Path]] = None) -> None:
+        if name is None:
+            name = spack.config.get('config:git_cmd')
+        try:
+            self.exe = which(name)
+        except CommandNotFoundError:
+            raise GitInitializationFailure(name)
 
-    @property
-    def version(self):
-        # lazy init git version
-        if not self._version:
-            v_string = extract_git_version_str(self)
-            self._version = tuple(int(i) for i in v_string.split("."))
-        return self._version
+    _version_output = re.compile(r'version (.*)$')
 
+    @cached_property
+    def version(self) -> StandardVersion:
+        # (cosmicexplorer): We have decorators for this purpose. Implementing this by hand is
+        # difficult to review and has confusing semantics.
+        from spack.version import StandardVersion
+        try:
+            output = self("--version", output=str)
+        except ProcessError as e:
+            raise GitEnvironmentError(
+                self.exe, f"git execution for version introspection failed: {e}")
+        if m := self._version_output.search(output):
+            return StandardVersion.from_string(m.group(1))
+        raise GitEnvironmentError(
+            self.exe,
+            f"git output for version introspection could not be parsed: {output}")
 
+# (cosmicexplorer): we already have this logic in StandardVersion--why are we reproducing it here?
+# The min/max versions mirror precisely the same workaround we perform in version_types.py.
+# This version logic isn't individually tested outside of this use case, and it's going to
+# fail. This is going to lead to an excessively brittle system that users will complain about.
 class VersionConditionalOption:
     def __init__(self, key, value=None, min_version=(0, 0, 0), max_version=(99, 99, 99)):
         self.key = key
@@ -72,7 +100,6 @@ class VersionConditionalOption:
             return option
         else:
             return []
-
 
 # The earliest git version where we start trying to optimize clones
 # git@1.8.5 is when branch could also accept tag so we don't have to track ref types as closely
@@ -104,15 +131,11 @@ def git(required: bool = ...) -> Optional[GitExecutable]: ...
 
 def git(required: bool = False) -> Optional[GitExecutable]:
     """Get a git executable. Raises CommandNotFoundError if ``required`` and git is not found."""
-    git_path = _find_git()
+    git = GitExecutable()
 
-    if not git_path:
-        if required:
-            raise exe.CommandNotFoundError("spack requires 'git'. Make sure it is in your path.")
-        return None
-
-    git = GitExecutable(git_path)
-
+    # (cosmicexplorer) This sort of note absolutely *REQUIRES* a link to an issue description so it
+    # avoids becoming untouchable because nobody understands the constraints. Particularly when
+    # a CVE is mentioned!
     # If we're running under pytest, add this to ignore the fix for CVE-2022-39253 in
     # git 2.38.1+. Do this in one place; we need git to do this in all parts of Spack.
     if git and "pytest" in sys.modules:
@@ -309,7 +332,7 @@ def git_init_fetch(url, ref, depth=None, debug=False, dest=None, git_exe=None):
     # minimum criteria for fetching a single commit, but also requires server to be configured
     # fall-back to a process error so an old git version or a fetch failure from an nonsupporting
     # server can be caught the same way.
-    if ref and is_git_commit_sha(ref) and version < MIN_DIRECT_COMMIT_FETCH:
+    if ref and is_git_commit_sha_like(ref) and version < MIN_DIRECT_COMMIT_FETCH:
         raise exe.ProcessError("Git older than 2.5 detected, can't fetch commit directly")
     init = ["init"]
     remote = ["remote", "add", "origin", url]
@@ -358,7 +381,12 @@ def git_checkout(
 
     cmds = []
     if sparse_paths and sparse_checkout:
-        sparse_checkout.extend([*sparse_paths, "--cone"])
+        # (cosmicexplorer):
+        # This argument was misspelled, which means the code path wasn't tested when it was added
+        # in 499a1b5494fc8c2d7bfe8bd74e84033ae690ca17.
+        # Let's discuss the best way to move faster with better testing.
+        # sparse_checkout.extend([*sparse_paths, "--cone"])
+        sparse_checkout.extend([*sparse_paths, "--clone"])
         cmds.append(sparse_checkout)
 
     cmds.append(checkout)
@@ -398,7 +426,7 @@ def git_clone(
             fetch.extend(["--all"])
         else:
             clone.extend(NO_SINGLE_BRANCH(version))
-    elif ref and not is_git_commit_sha(ref):
+    elif ref and not is_git_commit_sha_like(ref):
         if old:
             fetch.extend(["origin", ref])
         else:

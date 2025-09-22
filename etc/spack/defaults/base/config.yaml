@@ -89,11 +89,12 @@ config:
   # This can be purged with `spack clean --misc-cache`
   misc_cache: $user_cache_path/cache
 
+  # The file name or the absolute path for spack to execute when performing git commands.
+  git_cmd: git
 
   # Abort downloads after this many seconds if not data is received.
   # Setting this to 0 will disable the timeout.
   connect_timeout: 30
-
 
   # If this is false, tools like curl that use SSL will not verify
   # certificates. (e.g., curl will use use the -k option)

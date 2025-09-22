@@ -2,10 +2,24 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import enum
 import re
 from bisect import bisect_left
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from functools import cached_property
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+)
 
+import spack.llnl.util.tty as tty
 from spack.util.typing import SupportsRichComparison
 
 from .common import (
@@ -16,17 +30,20 @@ from .common import (
     EmptyRangeError,
     VersionLookupError,
     infinity_versions,
-    is_git_commit_sha,
+    is_git_commit_sha_like,
     is_git_version,
     iv_min_len,
 )
 from .lookup import AbstractRefLookup
 
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
 # Valid version characters
 VALID_VERSION = re.compile(r"^[A-Za-z0-9_.-][=A-Za-z0-9_.-]*$")
 
 # regex for version segments
-SEGMENT_REGEX = re.compile(r"(?:(?P<num>[0-9]+)|(?P<str>[a-zA-Z]+))(?P<sep>[_.-]*)")
+SEGMENT_REGEX = re.compile(r"(?:(?P<num>[0-9]+)|(?P<str>[a-z_A-Z]+))(?P<sep>[_.-]*)")
 
 
 class VersionStrComponent:
@@ -59,6 +76,14 @@ class VersionStrComponent:
         if len(string) >= iv_min_len:
             try:
                 value = infinity_versions.index(string)
+                matching_inf_version = infinity_versions[value]
+                if string.endswith(matching_inf_version):
+                    if len(string) == len(matching_inf_version):
+                        return VersionStrComponent(value)
+                    string_minus_suffix = string[:-len(matching_inf_version)]
+                    final_char = string_minus_suffix[-1]
+                    if (final_char.isdigit() or final_char == '.'):
+                        return VersionStrComponent(value)
             except ValueError:
                 pass
 
@@ -151,6 +176,9 @@ def parse_string_components(string: str) -> Tuple[VersionTuple, SeparatorTuple]:
     release: VersionComponentTuple = tuple(
         [int(m[0]) if m[0] else VersionStrComponent.from_string(m[1]) for m in segments]
     )
+    if len(release) >= 2 and type(release[-1]) is int:
+        if type(release[-2]) is VersionStrComponent:
+            release = release[:-1]
 
     return (release, prerelease), separators
 
@@ -316,6 +344,21 @@ class StandardVersion(ConcreteVersion):
     def __len__(self) -> int:
         return len(self.version[0])
 
+    def _paired_with_seps(self, release: Any, idx: slice) -> Iterator[Tuple[int, str]]:
+        return zip(release[idx], self.separators[idx])  # type: ignore[arg-type]
+
+    def _str_components(self, release: Any, idx: slice) -> Iterator[str]:
+        # We explicitly ignore need the final separator.
+        next_sep = None
+        for token, sep in self._paired_with_seps(release, idx):
+            if next_sep is not None:
+                yield next_sep
+                next_sep = None
+            yield str(token)
+            next_sep = str(sep)
+        if next_sep is not None:
+            tty.debug(f"dropping next_sep={next_sep} for {self}")
+
     def __getitem__(self, idx: Union[int, slice]):
         cls = type(self)
 
@@ -325,15 +368,8 @@ class StandardVersion(ConcreteVersion):
             return release[idx]
 
         elif isinstance(idx, slice):
-            string_arg = []
-
-            pairs = zip(release[idx], self.separators[idx])
-            for token, sep in pairs:
-                string_arg.append(str(token))
-                string_arg.append(str(sep))
-
+            string_arg = list(self._str_components(release, idx))
             if string_arg:
-                string_arg.pop()  # We don't need the last separator
                 return cls.from_string("".join(string_arg))
             else:
                 return StandardVersion.from_string("")
@@ -513,6 +549,40 @@ class StandardVersion(ConcreteVersion):
         """The version truncated to the first three components."""
         return self.up_to(3)
 
+    @cached_property
+    def _non_empty_separators(self) -> Sequence[str]:
+        if (self.separators and self.separators[-1] == ''):
+            return self.separators[:-1]
+        return self.separators
+
+    @staticmethod
+    def _coerce_elements_as_str(inputs: Iterable[Tuple[Any, Any]]) -> Iterator[str]:
+        for body, sep in inputs:
+            yield str(body)
+            if sep:
+                yield str(sep)
+
+    _trailing_separators = re.compile(r'[_.-]+$')
+
+    @classmethod
+    def _remove_trailing_separators(cls, s: str) -> str:
+        return cls._trailing_separators.sub('', s)
+
+    @classmethod
+    def _elements_as_str(cls, inputs: Iterable) -> str:
+        return cls._remove_trailing_separators(''.join(list(cls._coerce_elements_as_str(inputs))))
+
+    def trailing_element_split(self) -> Tuple[str, Optional[Union[int, VersionStrComponent]]]:
+        release = self.version[0]
+        if len(self._non_empty_separators) < len(release):
+            potential_final_str = release[-1]
+            if potential_final_str not in infinity_versions:
+                trimmed_release = release[:-1]
+                joined = self._elements_as_str(zip(trimmed_release, self._non_empty_separators))
+                return joined, potential_final_str
+        joined = self._elements_as_str(zip(release, self.separators))
+        return (joined, None)
+
 
 class GitVersion(ConcreteVersion):
     """Class to represent versions interpreted from git refs.
@@ -550,15 +620,20 @@ class GitVersion(ConcreteVersion):
     sufficient.
     """
 
-    __slots__ = ("has_git_prefix", "commit_sha", "ref", "is_commit", "std_version", "_ref_lookup")
+    __slots__ = ("has_git_prefix", "commit_sha", "ref", "is_commit", "original", "std_version",
+                 "_ref_lookup", "_verify_commit_sha")
 
     def __init__(self, string: str):
         # TODO will be required for concrete specs when commit lookup added
         self.commit_sha: Optional[str] = None
+        # If we are supplied both a commit *and* a branch, then push the commit to this variable
+        # until we complete the ref lookup!
+        self._verify_commit_sha: Optional[str] = None
         self.std_version: Optional[StandardVersion] = None
 
         # optional user supplied git ref
         self.ref: Optional[str] = None
+        self.original: Optional[StandardVersion] = None
 
         # An object that can lookup git refs to compare them to versions
         self._ref_lookup: Optional[AbstractRefLookup] = None
@@ -574,6 +649,14 @@ class GitVersion(ConcreteVersion):
             self.std_version = StandardVersion(
                 spack_version, *parse_string_components(spack_version)
             )
+
+            if "!" in self.ref:
+                self.sha_to_verify, self.ref = self.ref.split("!")
+            if "|" in self.ref:
+                self.ref, original = self.ref.split("|")
+                self.original = StandardVersion(
+                    original, *parse_string_components(original)
+                )
         else:
             # The ref_version is lazily attached after parsing, since we don't know what
             # package it applies to here.
@@ -581,11 +664,41 @@ class GitVersion(ConcreteVersion):
             self.ref = normalized_string
 
         # Used by fetcher
-        self.is_commit: bool = is_git_commit_sha(self.ref)
+        self.is_commit: bool = is_git_commit_sha_like(self.ref)
 
         # translations
         if self.is_commit:
             self.commit_sha = self.ref
+
+    def unshift_ref_arg(self, ref: str) -> None:
+        assert ref
+        assert not is_git_commit_sha_like(ref), ref
+        if self.is_commit:
+            self.sha_to_verify = self.commit_sha
+        self.commit_sha = None
+        self.is_commit = False
+        self.ref = ref
+        tty.debug(f'unshifted ref arg {ref!r} onto version {self}')
+
+    @property
+    def sha_to_verify(self) -> Optional[str]:
+        return self._verify_commit_sha
+
+    @sha_to_verify.setter
+    def sha_to_verify(self, potential_sha: Any) -> None:
+        if is_git_commit_sha_like(potential_sha):
+            if self._verify_commit_sha is None:
+                self._verify_commit_sha = potential_sha
+            elif self._verify_commit_sha == potential_sha:
+                tty.debug(f'curious: double verification sha pass for {self._verify_commit_sha} '
+                          f'in {self}')
+            else:
+                raise VersionChecksumError(
+                    f'attempted to set distinct verification sha {potential_sha} '
+                    f'upon prior sha {self._verify_commit_sha} (in {self})')
+        else:
+            raise TypeError(f'potential sha {potential_sha} to verify against {self} '
+                            'was not a full 40-character hexadecimal text string')
 
     @property
     def ref_version(self) -> StandardVersion:
@@ -612,8 +725,10 @@ class GitVersion(ConcreteVersion):
     def intersects(self, other: VersionType) -> bool:
         # For concrete things intersects = satisfies = equality
         if isinstance(other, GitVersion):
-            return self == other
+            return self == other or self.original == other.original
         if isinstance(other, StandardVersion):
+            if self.original:
+                return other == self.original
             return False
         if isinstance(other, ClosedOpenRange):
             return self.ref_version.intersects(other)
@@ -623,25 +738,44 @@ class GitVersion(ConcreteVersion):
 
     def intersection(self, other: VersionType) -> VersionType:
         if isinstance(other, ConcreteVersion):
-            return self if self == other else VersionList()
+            if self == other:
+                return self
+            if isinstance(other, StandardVersion):
+                return self.original.intersection(other)
+            if isinstance(other, GitVersion):
+                if self.original and other.original:
+                    return self.original.intersection(other.original)
+            return VersionList()
         return other.intersection(self)
 
     def satisfies(self, other: VersionType) -> bool:
         # Concrete versions mean we have to do an equality check
         if isinstance(other, GitVersion):
-            return self == other
+            return self == other or self.original == other.original
         if isinstance(other, StandardVersion):
-            return False
+            return self.original == other
         if isinstance(other, ClosedOpenRange):
             return self.ref_version.satisfies(other)
         if isinstance(other, VersionList):
             return any(self.satisfies(rhs) for rhs in other)
         raise TypeError(f"'satisfies()' not supported for instances of {type(other)}")
 
+    @property
+    def string(self) -> str:
+        if (std := self.std_version) is not None:
+            return std.string
+        return self.ref
+
     def __str__(self) -> str:
         s = ""
         if self.ref:
-            s += f"git.{self.ref}" if self.has_git_prefix else self.ref
+            if self.has_git_prefix:
+                s += "git."
+            s += self.ref
+            if self.sha_to_verify:
+                s += f"!{self.sha_to_verify}"
+            if self.original:
+                s += f"|{self.original}"
         # Note: the solver actually depends on str(...) to produce the effective version.
         # So when a lookup is attached, we require the resolved version to be printed.
         # But for standalone git versions that don't have a repo attached, it would still
@@ -739,39 +873,14 @@ class GitVersion(ConcreteVersion):
         """
         self._ref_lookup = lookup
 
-    def __iter__(self):
-        return self.ref_version.__iter__()
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.ref_version, name)
 
-    def __len__(self):
-        return self.ref_version.__len__()
+    def __dir__(self) -> List[str]:
+        return super().__dir__() + self.ref_version.__dir__()
 
     def __getitem__(self, idx):
         return self.ref_version.__getitem__(idx)
-
-    def isdevelop(self):
-        return self.ref_version.isdevelop()
-
-    def is_prerelease(self) -> bool:
-        return self.ref_version.is_prerelease()
-
-    @property
-    def dotted(self) -> StandardVersion:
-        return self.ref_version.dotted
-
-    @property
-    def underscored(self) -> StandardVersion:
-        return self.ref_version.underscored
-
-    @property
-    def dashed(self) -> StandardVersion:
-        return self.ref_version.dashed
-
-    @property
-    def joined(self) -> StandardVersion:
-        return self.ref_version.joined
-
-    def up_to(self, index) -> StandardVersion:
-        return self.ref_version.up_to(index)
 
 
 def _str_range(lo: StandardVersion, hi: StandardVersion) -> str:
@@ -1297,9 +1406,12 @@ def _prev_version(v: StandardVersion) -> StandardVersion:
     return StandardVersion("", (release, prerelease), separators)
 
 
-def Version(string: Union[str, int]) -> Union[StandardVersion, GitVersion]:
-    if not isinstance(string, (str, int)):
-        raise TypeError(f"Cannot construct a version from {type(string)}")
+def Version(string: Union[str, int, GitVersion]) -> Union[StandardVersion, GitVersion]:
+    ty = type(string)
+    if ty is GitVersion:
+        return string
+    elif ty not in (str, int):
+        raise TypeError(f"Cannot construct a version from {ty}")
     string = str(string)
     if is_git_version(string):
         return GitVersion(string)

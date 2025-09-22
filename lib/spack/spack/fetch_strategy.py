@@ -37,7 +37,7 @@ import time
 import urllib.parse
 import urllib.request
 from pathlib import PurePath
-from typing import Callable, List, Mapping, Optional, Type
+from typing import Callable, List, Mapping, Optional, Type, TYPE_CHECKING
 
 import spack.config
 import spack.error
@@ -56,6 +56,9 @@ from spack.llnl.string import comma_and, quote
 from spack.llnl.util.filesystem import get_single_file, mkdirp, symlink, temp_cwd, working_dir
 from spack.util.compression import decompressor_for
 from spack.util.executable import CommandNotFoundError, Executable, which
+
+if TYPE_CHECKING:
+    from spack.directives import VersionReferenceInfo
 
 #: List of all fetch strategies, created by FetchStrategy metaclass.
 all_strategies: List[Type["FetchStrategy"]] = []
@@ -840,10 +843,12 @@ class GitFetchStrategy(VCSFetchStrategy):
     ]
 
     def __init__(self, **kwargs):
+        # import pdb; pdb.set_trace()
 
         self.commit: Optional[str] = None
         self.tag: Optional[str] = None
         self.branch: Optional[str] = None
+        self.info: Optional["VersionReferenceInfo"] = None
 
         # Discards the keywords in kwargs that may conflict with the next call
         # to __init__
@@ -974,6 +979,9 @@ class GitFetchStrategy(VCSFetchStrategy):
         # TODO(psakievich) The use of the minimal clone need clearer justification via package API
         # or something. There is a trade space of storage minimization vs available git information
         # that grows to non-trivial proportions for larger projects
+        # TODO(cosmicexplorer): please link to an issue discussing this tradeoff so it becomes
+        # possible for others to follow up on your work. This comment is very difficult to convert
+        # into a starting point to address the issue.
         minimal_clone = self.commit and name and not self.get_full_repo
 
         with temp_cwd(ignore_cleanup_errors=True):
@@ -981,6 +989,11 @@ class GitFetchStrategy(VCSFetchStrategy):
                 try:
                     spack.util.git.git_init_fetch(self.url, self.commit, depth, **kwargs)
                 except spack.util.executable.ProcessError:
+                    # (cosmicexplorer):
+                    # There are a huge variety of ways a process execution can fail, and we don't
+                    # even log the event's occurrence in any form. This is *necessarily* going to
+                    # lead to performance issues, when the process execution failure begins to hide
+                    # additional failures.
                     spack.util.git.git_clone(
                         self.url, fetch_ref, self.get_full_repo, depth, **kwargs
                     )
@@ -993,7 +1006,7 @@ class GitFetchStrategy(VCSFetchStrategy):
 
             if self.stage:
                 self.stage.srcdir = repo_name
-            shutil.copytree(repo_name, dest, symlinks=True)
+            shutil.move(repo_name, dest)
         return
 
     def submodule_operations(self):
@@ -1524,6 +1537,7 @@ def _check_version_attributes(fetcher, pkg, version):
     This assumes that we have already determined the fetcher for the
     specific version using ``for_package_version()``
     """
+    # import pdb; pdb.set_trace()
     all_optionals = set(a for s in all_strategies for a in s.optional_attrs)
 
     args = pkg.versions[version]
@@ -1553,6 +1567,7 @@ def _extrapolate(pkg, version):
 
 def _from_merged_attrs(fetcher, pkg, version):
     """Create a fetcher from merged package and version attributes."""
+    # import pdb; pdb.set_trace()
     if fetcher.url_attr == "url":
         mirrors = pkg.all_urls_for_version(version)
         url = mirrors[0]
@@ -1597,18 +1612,19 @@ def _for_package_version(pkg, version=None):
 
     check_pkg_attributes(pkg)
 
-    if version is not None:
+    if version is None:
+        # TODO: why does this work?
+        version = pkg.version
+    else:
         assert not pkg.spec.concrete, "concrete specs should not pass the 'version=' argument"
         # Specs are initialized with the universe range, if no version information is given,
         # so here we make sure we always match the version passed as argument
         if not isinstance(version, spack.version.StandardVersion):
-            version = spack.version.Version(version)
+            version = spack.version.Version(str(version))
 
         version_list = spack.version.VersionList()
         version_list.add(version)
         pkg.spec.versions = version_list
-    else:
-        version = pkg.version
 
     # if it's a commit, we must use a GitFetchStrategy
     commit_var = pkg.spec.variants.get("commit", None)
@@ -1641,6 +1657,28 @@ def _for_package_version(pkg, version=None):
 
         # TODO(psakiev) eventually we should  only need to clone based on the commit
 
+    # info = pkg.version_infos.get(version, None)
+    # commit_sha = pkg.spec.variants.get("commit", None)
+    # if info and isinstance(info.processed_version, spack.version.GitVersion) or commit_sha:
+    #     if not hasattr(pkg, "git"):
+    #         raise spack.error.FetchError(
+    #             f"Cannot fetch git version for {pkg.name}. Package has no 'git' attribute"
+    #         )
+
+    #     # TODO(psakiev) eventually we should  only need to clone based on the commit
+    #     if commit_sha:
+    #         ref_type = "commit"
+    #         ref_value = commit_sha.value
+    #     else:
+    #         if info.branch is not None:
+    #             ref_type = "branch"
+    #         elif info.tag is not None:
+    #             ref_type = "tag"
+    #         else:
+    #             assert info.commit is not None
+    #             ref_type = "commit"
+    #         ref_value = info.processed_version.ref
+
         # commit stashed on version
         if version_meta_data:
             if not commit:
@@ -1652,13 +1690,36 @@ def _for_package_version(pkg, version=None):
         kwargs["submodules"] = pkg.version_or_package_attr("submodules", version, False)
         kwargs["git_sparse_paths"] = pkg.version_or_package_attr("git_sparse_paths", version, None)
         kwargs["get_full_repo"] = pkg.version_or_package_attr("get_full_repo", version, False)
+        kwargs["info"] = info
 
-        # if the ref_version is a known version from the package, use that version's
-        # attributes
-        ref_version = getattr(pkg.version, "ref_version", None)
-        if ref_version:
-            kwargs["git"] = pkg.version_or_package_attr("git", ref_version)
-            kwargs["submodules"] = pkg.version_or_package_attr("submodules", ref_version, False)
+        # # Populate the version with comparisons to other commits.
+        # if info:
+        #     from spack.version.git_ref_lookup import GitRefLookup
+        #     assert info.processed_version.has_git_prefix, info
+
+        #     version_for_ref: Optional[spack.version.GitVersion] = None
+        #     if info.request_link:
+        #         version_for_ref = spack.version.GitVersion(f"git.{info.processed_version.ref}")
+        #     elif info.links_to is not None:
+        #         version_for_ref = spack.version.GitVersion(f"git.{info.processed_version.ref}={info.links_to}")
+
+        #     if version_for_ref is not None:
+        #         version_for_ref.attach_lookup(GitRefLookup(pkg.name))
+
+        #         # if the ref_version is a known version from the package, use that version's
+        #         # attributes.
+        #         ref_version = version_for_ref.ref_version
+        #         kwargs["git"] = pkg.version_or_package_attr("git", ref_version)
+        #         kwargs["submodules"] = pkg.version_or_package_attr("submodules", ref_version, False)
+        #         kwargs["git_sparse_paths"] = pkg.version_or_package_attr("git_sparse_paths", version, None)
+        #         kwargs["get_full_repo"] = pkg.version_or_package_attr("get_full_repo", version, False)
+
+        #         if isinstance(version, spack.version.StandardVersion):
+        #             assert version_for_ref.original is None, version_for_ref
+        #             version_for_ref.original = version
+
+        #         # FIXME: make this work for commits!
+        #         pkg.spec.versions.add(spack.version.Version(str(version_for_ref)))
 
         fetcher = GitFetchStrategy(**kwargs)
         return fetcher

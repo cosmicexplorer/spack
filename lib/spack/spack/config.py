@@ -112,6 +112,8 @@ CONFIGURATION_DEFAULTS_PATH = ("defaults", os.path.join(spack.paths.etc_path, "d
 CONFIG_DEFAULTS = {
     "config": {
         "debug": False,
+        "trace": False,
+        "git_cmd": "git",
         "connect_timeout": 10,
         "verify_ssl": True,
         "checksum": True,

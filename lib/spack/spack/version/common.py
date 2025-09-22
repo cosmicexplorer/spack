@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
 import spack.error
-from spack.util.git import is_git_commit_sha
+from spack.util.git import is_git_commit_sha_like
 
 # Infinity-like versions. The order in the list implies the comparison rules
 infinity_versions = ["stable", "nightly", "trunk", "head", "master", "main", "develop"]
@@ -20,7 +20,7 @@ STRING_TO_PRERELEASE = {"alpha": ALPHA, "beta": BETA, "rc": RC, "final": FINAL}
 
 
 def is_git_version(string: str) -> bool:
-    return string.startswith("git.") or is_git_commit_sha(string) or "=" in string[1:]
+    return string.startswith("git.") or is_git_commit_sha_like(string) or "=" in string[1:]
 
 
 class VersionError(spack.error.SpackError):
