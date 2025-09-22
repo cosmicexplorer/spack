@@ -71,6 +71,8 @@ from typing import (
     Tuple,
     Union,
     overload,
+    Type,
+    TYPE_CHECKING,
 )
 
 import spack.vendor.archspec.cpu
@@ -103,6 +105,9 @@ import spack.version as vn
 import spack.version.git_ref_lookup
 
 from .enums import InstallRecordStatus
+
+if TYPE_CHECKING:
+    from spack.package_base import PackageBase
 
 __all__ = [
     "CompilerSpec",
@@ -3360,11 +3365,8 @@ class Spec:
             if not spack.repo.PATH.is_virtual(self.name) and spack.repo.PATH.is_virtual(
                 other.name
             ):
-                try:
-                    # Here we might get an abstract spec
-                    pkg_cls = spack.repo.PATH.get_pkg_class(self.fullname)
-                    pkg = pkg_cls(self)
-                except spack.repo.UnknownEntityError:
+                pkg = self._pkg_for_name()
+                if pkg is None:
                     # If we can't get package info on this spec, don't treat
                     # it as a provider of this vdep.
                     return False
@@ -4822,10 +4824,20 @@ class Spec:
     def __reduce__(self):
         return Spec.from_dict, (self.to_dict(hash=ht.dag_hash),)
 
+    def _pkg_for_name(self) -> Optional["PackageBase"]:
+        try:
+            # Here we might get an abstract spec
+            pkg_cls = spack.repo.PATH.get_pkg_class(self.fullname)
+            pkg = pkg_cls(self)
+            return pkg
+        except spack.repo.UnknownEntityError:
+            return None
+
     def attach_git_version_lookup(self):
         # Add a git lookup method for GitVersions
         if not self.name:
             return
+        # import pdb; pdb.set_trace()
         for v in self.versions:
             if isinstance(v, vn.GitVersion) and v.std_version is None:
                 v.attach_lookup(spack.version.git_ref_lookup.GitRefLookup(self.fullname))
