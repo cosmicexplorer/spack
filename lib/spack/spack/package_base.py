@@ -603,6 +603,7 @@ class PackageBase(WindowsRPath, PackageViewMixin, metaclass=PackageMeta):
 
     #: Class level dictionary populated by :func:`~spack.directives.version` directives
     versions: dict
+    version_infos: dict
     #: Class level dictionary populated by :func:`~spack.directives.resource` directives
     resources: Dict[spack.spec.Spec, List[Resource]]
     #: Class level dictionary populated by :func:`~spack.directives.depends_on` and

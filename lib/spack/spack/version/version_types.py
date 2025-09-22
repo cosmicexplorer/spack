@@ -2,9 +2,10 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import enum
 import re
 from bisect import bisect_left
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple, Union, TYPE_CHECKING
 
 from spack.util.typing import SupportsRichComparison
 
@@ -21,6 +22,9 @@ from .common import (
     iv_min_len,
 )
 from .lookup import AbstractRefLookup
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 # Valid version characters
 VALID_VERSION = re.compile(r"^[A-Za-z0-9_.-][=A-Za-z0-9_.-]*$")
@@ -552,7 +556,7 @@ class GitVersion(ConcreteVersion):
     sufficient.
     """
 
-    __slots__ = ["has_git_prefix", "commit_sha", "ref", "std_version", "_ref_lookup"]
+    __slots__ = ["has_git_prefix", "commit_sha", "ref", "original", "std_version", "_ref_lookup"]
 
     def __init__(self, string: str):
         # TODO will be required for concrete specs when commit lookup added
@@ -561,6 +565,7 @@ class GitVersion(ConcreteVersion):
 
         # optional user supplied git ref
         self.ref: Optional[str] = None
+        self.original: Optional[StandardVersion] = None
 
         # An object that can lookup git refs to compare them to versions
         self._ref_lookup: Optional[AbstractRefLookup] = None
@@ -576,6 +581,11 @@ class GitVersion(ConcreteVersion):
             self.std_version = StandardVersion(
                 spack_version, *parse_string_components(spack_version)
             )
+            if "|" in self.ref:
+                self.ref, original = self.ref.split("|")
+                self.original = StandardVersion(
+                    original, *parse_string_components(original)
+                )
         else:
             # The ref_version is lazily attached after parsing, since we don't know what
             # package it applies to here.
@@ -614,8 +624,10 @@ class GitVersion(ConcreteVersion):
     def intersects(self, other: VersionType) -> bool:
         # For concrete things intersects = satisfies = equality
         if isinstance(other, GitVersion):
-            return self == other
+            return self == other or self.original == other.original
         if isinstance(other, StandardVersion):
+            if self.original:
+                return other == self.original
             return False
         if isinstance(other, ClosedOpenRange):
             return self.ref_version.intersects(other)
@@ -625,25 +637,42 @@ class GitVersion(ConcreteVersion):
 
     def intersection(self, other: VersionType) -> VersionType:
         if isinstance(other, ConcreteVersion):
-            return self if self == other else VersionList()
+            if self == other:
+                return self
+            if isinstance(other, StandardVersion):
+                return self.original.intersection(other)
+            if isinstance(other, GitVersion):
+                if self.original and other.original:
+                    return self.original.intersection(other.original)
+            return VersionList()
         return other.intersection(self)
 
     def satisfies(self, other: VersionType) -> bool:
         # Concrete versions mean we have to do an equality check
         if isinstance(other, GitVersion):
-            return self == other
+            return self == other or self.original == other.original
         if isinstance(other, StandardVersion):
-            return False
+            return self.original == other
         if isinstance(other, ClosedOpenRange):
             return self.ref_version.satisfies(other)
         if isinstance(other, VersionList):
             return any(self.satisfies(rhs) for rhs in other)
         raise TypeError(f"'satisfies()' not supported for instances of {type(other)}")
 
+    @property
+    def string(self) -> str:
+        if (std := self.std_version) is not None:
+            return std.string
+        return self.ref
+
     def __str__(self) -> str:
         s = ""
         if self.ref:
-            s += f"git.{self.ref}" if self.has_git_prefix else self.ref
+            if self.has_git_prefix:
+                s += "git."
+            s += self.ref
+            if self.original:
+                s += f"|{self.original}"
         # Note: the solver actually depends on str(...) to produce the effective version.
         # So when a lookup is attached, we require the resolved version to be printed.
         # But for standalone git versions that don't have a repo attached, it would still
