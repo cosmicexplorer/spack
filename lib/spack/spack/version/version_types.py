@@ -948,7 +948,7 @@ class VersionList(VersionType):
         if vlist is None:
             self.versions = []
 
-        elif ty is str:
+        elif issubclass(ty, str):
             vlist = from_string(vlist)  # type: ignore[arg-type]
             if type(vlist) is self.__class__:
                 self.versions = vlist.versions
@@ -1350,7 +1350,7 @@ def ver(obj: Union[VersionType, str, list, tuple, int, float]) -> VersionType:
     ty = type(obj)
     if ty in (StandardVersion, GitVersion, ClosedOpenRange, VersionList):
         return obj  # type: ignore[return-value]
-    elif ty is str:
+    elif issubclass(ty, str):
         return from_string(obj)  # type: ignore[arg-type]
     elif ty in (list, tuple):
         return VersionList(obj)  # type: ignore[arg-type]
