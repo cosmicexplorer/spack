@@ -867,7 +867,7 @@ class ClosedOpenRange(VersionType):
         return NotImplemented
 
     def __contains__(rhs, lhs):
-        if type(lhs) in (ConcreteVersion, rhs.__class__, VersionList):
+        if type(lhs) in (GitVersion, StandardVersion, rhs.__class__, VersionList):
             return lhs.satisfies(rhs)
         raise TypeError(f"'in' not supported between instances of {type(rhs)} and {type(lhs)}")
 
