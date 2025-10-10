@@ -332,12 +332,15 @@ if [ "$_sp_shell" = bash ]; then
 fi
 
 # Identify and lock the python interpreter
-for cmd in "${SPACK_PYTHON:-}" python3 python python2; do
-    if command -v > /dev/null "$cmd"; then
-        export SPACK_PYTHON="$(command -v "$cmd")"
-        break
-    fi
-done
+_select_spack_py() {
+    command -v "$@" 2>/dev/null \
+        | sed -r -e 's#^alias ([^=]+)=([.*])$#\2#'
+}
+
+_try_py=$(_select_spack_py | head -n1)
+if [[ -n "$_try_py" ]]; then
+    export SPACK_PYTHON="$_try_py"
+fi
 
 if [ -z "${SPACK_SKIP_MODULES+x}" ]; then
     need_module="no"
