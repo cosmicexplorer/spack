@@ -324,13 +324,21 @@ if [ "$_sp_shell" = bash ]; then
     export -f _spack_shell_wrapper
 fi
 
-# Identify and lock the python interpreter
-for cmd in "${SPACK_PYTHON:-}" python3 python python2; do
-    if command -v > /dev/null "$cmd"; then
-        export SPACK_PYTHON="$(command -v "$cmd")"
-        break
-    fi
-done
+# Identify and lock the python interpreter.
+_select_spack_py() {
+    # If the user has an alias definition, e.g. `alias python='python3 -v'`, we want to extract that
+    # value.
+    command -v "$@" 2>/dev/null \
+        | sed -n -E "s#^alias ([^=]+)=(.*)\$#\\2# ; s#^'|'\$##g ; p"
+}
+
+# prefer SPACK_PYTHON environment variable, python3, python, then python2
+SPACK_PREFERRED_PYTHONS="python3 python python2 /usr/libexec/platform-python"
+
+_try_py=`_select_spack_py "${SPACK_PYTHON:-}" ${SPACK_PREFERRED_PYTHONS} | head -n1`
+if test x"$_try_py" != x; then
+    export SPACK_PYTHON="$_try_py"
+fi
 
 if [ -z "${SPACK_SKIP_MODULES+x}" ] && { type module > /dev/null 2>&1 || type use > /dev/null 2>&1; }; then
     stdout="$(command spack --print-shell-vars sh)" || return

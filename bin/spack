@@ -9,14 +9,20 @@
 # Following line is a shell no-op, and starts a multi-line Python comment.
 # See https://stackoverflow.com/a/47886254
 """:"
+_select_spack_py() {
+    # If the user has an alias definition, e.g. `alias python='python3 -v'`, we want to extract that
+    # value.
+    command -v "$@" 2>/dev/null
+}
+
 # prefer SPACK_PYTHON environment variable, python3, python, then python2
 SPACK_PREFERRED_PYTHONS="python3 python python2 /usr/libexec/platform-python"
-for cmd in "${SPACK_PYTHON:-}" ${SPACK_PREFERRED_PYTHONS}; do
-    if command -v > /dev/null "$cmd"; then
-        export SPACK_PYTHON="$(command -v "$cmd")"
-        exec "${SPACK_PYTHON}" "$0" "$@"
-    fi
-done
+
+_try_py=`_select_spack_py "${SPACK_PYTHON:-}" ${SPACK_PREFERRED_PYTHONS} | head -n1`
+if test x"$_try_py" != x; then
+    export SPACK_PYTHON="$_try_py"
+    exec "${SPACK_PYTHON}" "$0" "$@"
+fi
 
 echo "==> Error: spack could not find a python interpreter!" >&2
 exit 1
