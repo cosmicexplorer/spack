@@ -334,10 +334,11 @@ fi
 # Identify and lock the python interpreter
 _select_spack_py() {
     command -v "$@" 2>/dev/null \
-        | sed -r -e 's#^alias ([^=]+)=([.*])$#\2#'
+        | sed -r -e 's#^alias ([^=]+)=(.*)$#\2#' \
+        | tr -d "'"
 }
 
-_try_py=$(_select_spack_py | head -n1)
+_try_py=$(_select_spack_py ${SPACK_PYTHON:-} python3 python python2 | head -n1)
 if [[ -n "$_try_py" ]]; then
     export SPACK_PYTHON="$_try_py"
 fi
