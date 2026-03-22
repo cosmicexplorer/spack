@@ -17,6 +17,7 @@ from .color import cescape, clen, cprint, cwrite
 
 # Globals
 _debug = 0
+_trace = -1
 _verbose = False
 _stacktrace = False
 _timestamp = False
@@ -30,19 +31,28 @@ indent = "  "
 def debug_level() -> int:
     return _debug
 
+def trace_level():
+    return _trace
 
 def is_verbose() -> bool:
     return _verbose
 
-
 def is_debug(level: int = 1) -> bool:
     return _debug >= level
 
+def is_trace(level: int = 1) -> bool:
+    return _trace >= level
 
 def set_debug(level: int = 0) -> None:
     global _debug
     assert level >= 0, "Debug level must be a positive value"
     _debug = level
+
+
+def set_trace(level: int = 0) -> None:
+    global _trace
+    assert level >= 0, "Trace level must be a positive value"
+    _trace = level
 
 
 def set_verbose(flag: bool) -> None:
@@ -218,17 +228,22 @@ def info(
     stream.flush()
 
 
-def verbose(message, *args, format: str = "c", **kwargs) -> None:
+def verbose(message, level: int = 1, *args, format: str = "c", **kwargs) -> None:
     """Print a verbose message if the verbose flag is set."""
-    if _verbose:
+    if is_verbose(level):
         info(message, *args, format=format, **kwargs)
 
 
-def debug(
-    message, *args, level: int = 1, format: str = "g", stream: Optional[IO[str]] = None, **kwargs
-) -> None:
+def debug(message, *args, level: int = 1, format: str = "g", stream: Optional[IO[str]] = None, **kwargs) -> None:
     """Print a debug message if the debug level is set."""
     if is_debug(level):
+        stream_arg = stream or sys.stderr
+        info(message, *args, format=format, stream=stream_arg, **kwargs)
+
+
+def trace(message, *args, level: int = 1, format: str = "b", stream: Optional[IO[str]] = None, **kwargs) -> None:
+    """Print a trace log message if the trace level is set."""
+    if is_trace(level):
         stream_arg = stream or sys.stderr
         info(message, *args, format=format, stream=stream_arg, **kwargs)
 
