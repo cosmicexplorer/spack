@@ -1143,7 +1143,10 @@ def main(argv=None):
         return 1
 
     except spack.error.SpackError as e:
-        tty.debug(e)
+        if spack.config.get("config:debug") or spack.error.SHOW_BACKTRACE:
+            traceback.print_exc()
+        else:
+            tty.debug(e)
         e.die()  # gracefully die on any SpackErrors
 
     except KeyboardInterrupt:
