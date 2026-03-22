@@ -19,6 +19,10 @@ PRERELEASE_TO_STRING = ["alpha", "beta", "rc"]
 STRING_TO_PRERELEASE = {"alpha": ALPHA, "beta": BETA, "rc": RC, "final": FINAL}
 
 
+# TODO: this does not state something very specific -- what it probably means is something like
+#       "this string was clearly categorized as a git reference by some previous phase". I think
+#       there's some really interesting discussion to be had on asynchronous execution that you
+#       would make this *more* clear and not less!
 def is_git_version(string: str) -> bool:
     return string.startswith("git.") or is_git_commit_sha_like(string) or "=" in string[1:]
 
