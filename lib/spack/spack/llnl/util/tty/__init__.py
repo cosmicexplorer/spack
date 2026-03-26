@@ -170,11 +170,17 @@ def get_timestamp(force: bool = False) -> str:
         return ""
 
 
-def msg(message: Union[Exception, str], *args: str, newline: bool = True) -> None:
+def msg(
+    message: Union[Exception, str],
+    *args: str,
+    newline: bool = True,
+    stream: Optional[IO[str]] = None,
+) -> None:
     """Print a message to the console."""
     if not msg_enabled():
         return
 
+    stream = stream or sys.stderr
     if isinstance(message, Exception):
         message = f"{message.__class__.__name__}: {message}"
     else:
@@ -185,10 +191,13 @@ def msg(message: Union[Exception, str], *args: str, newline: bool = True) -> Non
         st_text = process_stacktrace(2)
 
     nl = "\n" if newline else ""
-    cwrite(f"@*b{{{st_text}==>}} {get_timestamp()}{cescape(_output_filter(message))}{nl}")
+    cwrite(
+        f"@*b{{{st_text}==>}} {get_timestamp()}{cescape(_output_filter(message))}{nl}",
+        stream=stream,
+    )
 
     for arg in args:
-        print(indent + _output_filter(str(arg)))
+        print(indent + _output_filter(str(arg)), file=stream)
 
 
 def info(
@@ -204,7 +213,7 @@ def info(
     if isinstance(message, Exception):
         message = f"{message.__class__.__name__}: {str(message)}"
 
-    stream = stream or sys.stdout
+    stream = stream or sys.stderr
     st_text = ""
     if _stacktrace:
         st_text = process_stacktrace(countback)
@@ -234,36 +243,32 @@ def verbose(message, level: int = 1, *args, format: str = "c", **kwargs) -> None
         info(message, *args, format=format, **kwargs)
 
 
-def debug(message, *args, level: int = 1, format: str = "g", stream: Optional[IO[str]] = None, **kwargs) -> None:
+def debug(message, *args, level: int = 1, format: str = "g", **kwargs) -> None:
     """Print a debug message if the debug level is set."""
     if is_debug(level):
-        stream_arg = stream or sys.stderr
-        info(message, *args, format=format, stream=stream_arg, **kwargs)
+        info(message, *args, format=format, **kwargs)
 
 
-def trace(message, *args, level: int = 1, format: str = "b", stream: Optional[IO[str]] = None, **kwargs) -> None:
+def trace(message, *args, level: int = 1, format: str = "b", **kwargs) -> None:
     """Print a trace log message if the trace level is set."""
     if is_trace(level):
-        stream_arg = stream or sys.stderr
-        info(message, *args, format=format, stream=stream_arg, **kwargs)
+        info(message, *args, format=format, **kwargs)
 
 
-def error(message, *args, format: str = "*r", stream: Optional[IO[str]] = None, **kwargs) -> None:
+def error(message, *args, format: str = "*r", **kwargs) -> None:
     """Print an error message."""
     if not error_enabled():
         return
 
-    stream = stream or sys.stderr
-    info(f"Error: {message}", *args, format=format, stream=stream, **kwargs)
+    info(f"Error: {message}", *args, format=format, **kwargs)
 
 
-def warn(message, *args, format: str = "*Y", stream: Optional[IO[str]] = None, **kwargs) -> None:
+def warn(message, *args, format: str = "*Y", **kwargs) -> None:
     """Print a warning message."""
     if not warn_enabled():
         return
 
-    stream = stream or sys.stderr
-    info(f"Warning: {message}", *args, format=format, stream=stream, **kwargs)
+    info(f"Warning: {message}", *args, format=format, **kwargs)
 
 
 def die(message, *args, countback: int = 4, **kwargs) -> NoReturn:
