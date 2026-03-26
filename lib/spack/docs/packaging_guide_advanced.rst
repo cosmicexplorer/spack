@@ -218,9 +218,17 @@ The first step is fairly simple, as it requires only to specify a package-level 
        # would match for example "foo", "foobar", and "bazfoo".
        executables = ["foo"]
 
-This attribute must be a list of strings.
-Each string is a regular expression (e.g. "gcc" would match "gcc", "gcc-8.3", "my-weird-gcc", etc.) to determine a set of system executables that might be part of this package.
-Note that to match only executables named "gcc" the regular expression ``"^gcc$"`` must be used.
+Spack expects this value to be a list of strings.
+It is standard to use an attribute like this example, because more dynamic behavior like a ``@property`` can be very difficult for Spack to fully capture in a reproducible way.
+Spack supports another interface to `filter matching executables`_ to address some of these more complex cases.
+
+Each returned string from the list in ``executables`` is interpreted by Spack as the pattern string for a regular expression with the semantics of Python's ``re.search()`` operation.
+This is matched against only the file name (some call this the "entry name"), without any directory separators, so "gcc" would match e.g. "gcc", "gcc-8.3", or "my-weird-gcc".
+
+As a result, if you want to match *only* executables named *exactly* "gcc", the start- and end-of-pattern metacharacters ``^`` and ``$`` can be used ``"^gcc$"``.
+See `the Python regex docs <https://docs.python.org/3/library/re.html#module-re>`_ for further specifics.
+
+.. TODO: could we offer a wrappers for this extremely scenario? Not sure where to put that.
 
 Finally, to determine the version of each executable the ``determine_version`` method must be implemented:
 
