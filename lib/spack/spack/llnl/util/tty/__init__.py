@@ -239,7 +239,7 @@ def info(
 
 def verbose(message, level: int = 1, *args, format: str = "c", **kwargs) -> None:
     """Print a verbose message if the verbose flag is set."""
-    if is_verbose(level):
+    if is_verbose():
         info(message, *args, format=format, **kwargs)
 
 
