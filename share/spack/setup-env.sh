@@ -325,11 +325,28 @@ if [ "$_sp_shell" = bash ]; then
 fi
 
 # Identify and lock the python interpreter.
+_extract_alias() {
+    # If the user has an alias definition, e.g. `alias python='python3 -v'`, we want to extract
+    # that value.
+    cat <<\__EOF__
+/^alias/ ! { p ; d }
+s#^alias[[:space:]]+##
+
+/^'/ {
+  s#^'[^=]+=##
+  s#'$##
+  p ; d
+}
+
+s#^[^=]+=##
+s#^'|'$##g
+p
+__EOF__
+}
 _select_spack_py() {
-    # If the user has an alias definition, e.g. `alias python='python3 -v'`, we want to extract that
-    # value.
-    command -v "$@" 2>/dev/null \
-        | sed -n -E "s#^alias ([^=]+)=(.*)\$#\\2# ; s#^'|'\$##g ; p"
+    for _potential_python; do
+        command -v "$_potential_python" 2>/dev/null
+    done | LC_ALL=C sed -n -E -f <(_extract_alias)
 }
 
 # prefer SPACK_PYTHON environment variable, python3, python, then python2
