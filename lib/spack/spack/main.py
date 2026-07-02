@@ -496,7 +496,7 @@ def make_argument_parser(**kwargs):
         "--debug",
         action="count",
         default=0,
-        help="write out debug messages\n\n(more d's for more verbosity: -d, -dd, -ddd, etc.)",
+        help="write out debug messages\n(more d's for more verbosity: -d, -dd, -ddd, etc.)",
     )
     debug.add_argument(
         "-t",
