@@ -4,7 +4,11 @@
 
 """
 This file implements an expression syntax, similar to ``texinfo``, for adding
-ANSI colors to text.
+`ANSI colors <https://en.wikipedia.org/wiki/ANSI_escape_code>`_ to text.
+
+It does not attempt to span the whole gamut of 256 colors (or more!) available to  modern
+terminals and HTML output, but instead seeks to define a robust minimal basis so that the
+intended effect of text decorations comes across the same to all interactive Spack deployments.
 
 See :func:`colorize`, :func:`cwrite`, and :func:`cprint` for routines that can
 generate colored output.
@@ -53,8 +57,12 @@ text        ``.*``
 ``_``, ``/``, or ``~``, which indicates styling that modifies the *shape* of the font, such as bold
 or underline effects. The subsequent character is the color code to be applied.
 This can be ``[krgybmcw]`` or ``[KRGYBMCW]``,
-where the letters map to  ``black(k)``, ``red(r)``, ``green(g)``, ``yellow(y)``, ``blue(b)``,
-``magenta(m)``, ``cyan(c)``, and ``white(w)``.
+where the letters map to  ``black(k)`` ("key"), ``red(r)``, ``green(g)``, ``yellow(y)``, ``blue(b)``,
+``magenta(m)``, ``cyan(c)``, and ``white(w)``,
+
+where each ASCII initialism corresponds to an element of the standard
+`RGB <https://en.wikipedia.org/wiki/RGB_color_model>`_ or
+`CMYK <https://en.wikipedia.org/wiki/CMYK_color_model>`_ color palletes.
 
 The lowercase ASCII alphabet is translated to ANSI color sequences as above, while the
 corresponding uppercase ASCII character denotes a "bright" version of the indicated color.
@@ -71,20 +79,146 @@ The console can be reset later to plain text with ``@.``.
 To output an ``@``, use ``@@``.  To output a ``}`` inside braces, use ``}}``.
 """
 
+import enum
 import io
 import os
 import re
 import sys
 import textwrap
+import weakref
 from contextlib import contextmanager
-from typing import IO, Iterator, List, NamedTuple, Optional, Tuple, Union
+from functools import cached_property
+from typing import TYPE_CHECKING, NamedTuple, Union
+
+from spack.util.lang import classproperty, memoized
+
+if TYPE_CHECKING:
+    from typing import (
+        Any, IO, Iterable, Iterator, List, Mapping,
+        Optional, Set, Tuple
+    )
 
 
-class ColorParseError(Exception):
+class ColorLookupError(ValueError):
+    """Raised when a color could not be translated at runtime."""
+
+class ColorSpecificationError(TypeError):
     """Raised when a color format fails to parse."""
 
-    def __init__(self, message: str) -> None:
-        super().__init__(message)
+
+class _ThinSpecRef(weakref.ref):
+    def __init__(
+            self,
+            ob: Any,
+            callback: Callable[[Self]] | None = None,
+        ) -> None:
+        if type(ob) is not SingleSyntaxSpecifier:
+            raise ColorSpecificationError(
+                f"{ob!r} must be a {SingleSyntaxSpecifier!r}")
+        if callback is not None:
+            assert callable(callback), callback
+        super().__init__(ob, callback)
+
+
+class SingleSyntaxSpecifier:
+    _code: int
+    __slots__ = dict(_code='single printable UCS-2 codepoint')
+    # __slots__ = frozendict(dict(_code='single printable UCS-2 codepoint'))
+    __match_args__ = tuple(__slots__.keys())
+
+    def __getnewargs__(self) -> tuple[int]:
+        return (self._code,)
+    def __new__(cls, code: int) -> Self:
+        if not issubclass(type(code), int):
+            raise ColorSpecificationError(
+            f"syntax specifier code {code!r} must be of type {int!r}!")
+        try:
+            c = chr(code)
+        except ValueError:
+            raise ColorSpecificationError(
+                f"syntax specifier code {code!r} "
+                'must resolve to a single codepoint\n'
+                'within the Universal Character Set')
+
+        if c.isprintable():
+            return cls(code)
+        raise ColorSpecificationError(
+            f"syntax specifier code {code!r} "
+            'must resolve to a printable codepoint in the Universal Character Set,\n'
+            f"but got: {c!r}")
+    def __int__(self) -> int:
+        return self._code
+    def __eq__(self, other: Any) -> bool:
+        return type(other) is self.__class__ and other._code == self._code
+    def __ne__(self, other: Any) -> bool:
+        return not self == other
+    def __hash__(self) -> int:
+        return self.__getnewargs__()
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}({self._code})"
+
+    @cached_property
+    def codepoint(self) -> str:
+        return chr(self._code)
+    @cached_property
+    def coded_utf8(self) -> bytes:
+        return self.codepoint.encode('utf-8')
+
+    def __str__(self) -> str:
+        return f"<UCS-2 codepoint: {self.codepoint!r}>"
+    def __bytes__(self) -> bytes:
+        return self.coded_utf8
+
+
+class ColorCode(enum.Enum):
+    red     = 'r'
+    green   = 'g'
+    blue    = 'b'
+    cyan    = 'c'
+    magenta = 'm'
+    yellow  = 'y'
+    key     = 'k'
+
+    @staticmethod
+    @memoized
+    def normalize_name(x: str) -> str:
+        match x.lower():
+            case 'black':
+                return 'key'
+            case y:
+                return y
+
+    @classproperty
+    @memoized
+    def normed_names(cls: type[Self]) -> Mapping[str, Self]:
+        ret = {v.value: v for v in cls}
+        ret['black'] = cls.key
+        # return frozendict(ret)
+        return ret
+
+    @classproperty
+    @memoized
+    def allowed_names(cls) -> Set[str]:
+        return frozenset(cls.normed_names.keys())
+
+    @classmethod
+    @memoized
+    def lookup_name(cls: type[Self], name: str | Self) -> Self:
+        if type(name) is cls:
+            return name
+        try:
+            return cls.normed_names[cls.normalize_name(name)]
+        except KeyError as e:
+            raise ColorParseError(f"string color name {name!r} (normalized to {str(e)!r}) "
+                                  f"was not found in {cls!r}:\n"
+                                  f"must be one of {cls.allowed_names!r}")
+
+
+class StyleCode(enum.Enum):
+    bold = '*'
+    italics = '/'
+    underline = '_'
+    strikethrough = '~'
 
 
 # Text styles for ansi codes

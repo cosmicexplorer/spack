@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 
+import abc
 import contextlib
 import io
 import os
@@ -10,19 +11,32 @@ import sys
 import textwrap
 import traceback
 from datetime import datetime
+from enum import IntEnum
 from types import TracebackType
 from typing import IO, TYPE_CHECKING, Callable, Iterator, NoReturn, Optional, Type, Union
 
 if TYPE_CHECKING:
+    from typing import TypeVar
     from typing_extensions import Self
 
 from spack.util.lang import memoized
 
 from .color import cescape, clen, cprint, cwrite
 
+
+class LogLevel(IntEnum):
+    TRACE   = -1
+    DEBUG   = 0
+    INFO    = 1
+    WARNING = 2
+    ERROR   = 3
+
+
+
 # Globals
-_debug = 0
+# FIXME: trace/debug/verbose: kill these!
 _trace = -1
+_debug = 0
 _verbose = False
 _stacktrace = False
 _timestamp = False
@@ -31,6 +45,28 @@ _warn_enabled = True
 _error_enabled = True
 _output_filter: Callable[[str], str] = lambda s: s
 indent = "  "
+
+
+class StacktraceDepth(int):
+    def __new__(cls, x: int = 0) -> Self:
+        if not issubclass(type(x), int):
+            raise TypeError(f"value {x!r} to {cls!r} must be {int!r} type!\n"
+                            f"but instead was: {type(x)!r}")
+        if x < 0:
+            raise TypeError(f"value {x!r} to {cls!r} must be >= 0!")
+        ret = super().__new__(cls, x)
+        ret._x: int = x
+        return ret
+    def __int__(self) -> int:
+        return self._x
+    def __bool__(self) -> bool:
+        return self._x > 0
+    def __str__(self) -> str:
+        if bool(self):
+            return f"{self._x:d}"
+        return '<stacktrace deselected>'
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(x = {self._x})"
 
 
 def debug_level() -> int:
@@ -97,8 +133,11 @@ def error_enabled() -> bool:
     return _error_enabled
 
 
+
+
+
 @contextlib.contextmanager
-def output_filter(filter_fn: Callable[[str], str]) -> Iterator[None]:
+def output_filter[T](filter_fn: Callable[[T], T]) -> Iterator[None]:
     """Context manager that applies a filter to all output."""
     global _output_filter
     saved_filter = _output_filter
@@ -206,6 +245,7 @@ def msg(
 
 
 def info(
+    # FIXME: rename this to e.g. "prefix"!
     message: Union[Exception, str],
     *args,
     format: str = "*b",

@@ -127,7 +127,7 @@ properties: Dict[str, Any] = {
             "connect_timeout": {
                 "type": "integer",
                 "minimum": 0,
-                "description": "Abort downloads after this many seconds if no data is received "
+                "description": "Abort downloads if the connection phase does not complete after this many seconds "
                 "(0 disables timeout)",
             },
             "verify_ssl": {

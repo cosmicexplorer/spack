@@ -8,29 +8,188 @@ TODO: this is really part of spack.config. Consolidate it.
 """
 
 import contextlib
+import dataclasses
 import functools
 import os
+import pathlib
 import re
 import subprocess
+import stat
 import sys
-from typing import List, Optional, Union
-from urllib.parse import urlparse
+from enum import IntEnum
+from functools import lru_cache, cached_property
+from typing import TYPE_CHECKING, Any, ClassVar, Iterable, List, Optional, Union, cast, overload
+from urllib.parse import ParseResult, urlparse
 
 import spack.llnl.util.tty as tty
 from spack.util.lang import memoized
 
+if TYPE_CHECKING:
+    from typing_extensions import Self
+
 __all__ = []
 
 
-class Path:
+class Path(IntEnum):
     """Enum to identify the path-style."""
 
-    unix: int = 0
-    windows: int = 1
-    platform_path: int = windows if sys.platform == "win32" else unix
+    unix = 0
+    windows = 1
+    platform_path = windows if sys.platform == "win32" else unix
 
 
-def format_os_path(path: str, mode: int = Path.unix) -> str:
+class PlatformPath(str):
+    def __new__(cls, path: str, /, mode: int | Path = Path.platform_path) -> Self:
+        if type(mode) is int:
+            mode = Path(mode)
+        ret = super().__new__(cls, format_os_path(path, mode))
+        return cls._coalesce_matching(ret)
+
+    @staticmethod
+    @lru_cache(maxsize=2000)
+    def _coalesce_matching(p: 'PlatformPath') -> 'PlatformPath':
+        return p
+
+    def __repr__(self) -> str:
+        r = super().__repr__()
+        return f"{self.__class__.__name__}({r})"
+
+
+@dataclasses.dataclass(slots=True, frozen=True, repr=True, init=True)
+class ParsedUrl:
+    arg: '_PathKey'
+    parsed: ParseResult
+
+    __hash__ = None
+
+    def __post_init__(self) -> None:
+        assert type(self.arg) is _PathKey, self.arg
+        assert '\\' not in self.arg._is_or_as_str, self.arg
+        assert type(self.parsed) is ParseResult, self.parsed
+        assert bool(self.parsed.scheme) and len(self.parsed.scheme) > 1, self.parsed
+
+    def __str__(self) -> str:
+        return self.arg._is_or_as_str
+
+
+@dataclasses.dataclass(frozen=True, repr=True, init=True)
+class _PathKey:
+    __slots__ = ('value', '__dict__')
+    value: str | pathlib.PathLike
+
+    def __hash__(self) -> int:
+        return id(self._value)
+    def __eq__(self, other: Any) -> bool:
+        return self is other
+    def __ne__(self, other: Any) -> bool:
+        return not self == other
+
+    @cached_property
+    def _is_or_as_str(self) -> str:
+        if isinstance(self.value, str):
+            return self.value
+        return str(self.value)
+
+    def _format_platform_path(self, **kwargs) -> PlatformPath:
+        return PlatformPath(self._is_or_as_str, **kwargs)
+
+    @cached_property
+    def _is_or_as_url(self) -> ParseResult | None:
+        s = self._is_or_as_str
+        if '\\' in s:
+            return None
+        ret = urlparse(s)
+        if bool(ret.scheme) and len(ret.scheme) > 1:
+            return ret
+        return None
+
+    def format_url_or_platform_path(self) -> ParsedUrl | PlatformPath:
+        parsed = self._is_or_as_url
+        if parsed is not None:
+            return ParsedUrl(self, parsed)
+        return self._format_platform_path()
+
+
+@dataclasses.dataclass(slots=True, frozen=True, eq=True, repr=True, init=True)
+class _PlatformPath:
+    arg: _PathKey
+    value: str
+
+    _normalized_mapping: ClassVar[dict[PlatformPath, list[_PathKey]]] = {}
+
+    # def __post_init__
+
+
+class _SimpleFileType(IntEnum):
+    REG = stat.S_IFREG
+    DIR = stat.S_IFDIR
+    LNK = stat.S_IFLNK
+    FIFO = stat.S_IFIFO
+    SOCK = stat.S_IFSOCK
+    CHR = stat.S_IFCHR
+    UNKNOWN = stat.S_IFWHT
+
+    @classmethod
+    def classify(cls, res: os.stat_result) -> Self:
+        mode = res.st_mode
+        assert type(mode) is int, mode
+        for candidate in cls:
+            v = candidate.value
+            if v == 0:
+                continue
+            if (mode & v) != 0:
+                return candidate
+        return cls.UNKNOWN
+
+
+@dataclasses.dataclass(slots=True, frozen=True, eq=True, init=True)
+class _Fd:
+    fd: int
+
+    def __post_init__(self) -> None:
+        assert self.fd > 0, self
+
+    def __del__(self) -> None:
+        os.close(fd)
+
+    @classmethod
+    def open(cls, k: _PathKey, flags: int = os.O_PATH | os.O_NOFOLLOW, **kwargs) -> Self:
+        if not isinstance(flags, int):
+            raise TypeError(f"flags argument {flags!r} must be integer")
+        platform_path = k._format_platform_path()
+        fd = os.open(platform_path, flags, **kwargs)
+        return cls(fd)
+
+    def _stat(self) -> os.stat_result:
+        return os.fstat(self.fd)
+
+    @cached_property
+    def _idempotent_fstat(self) -> os.stat_result:
+        return self._stat()
+
+    def _dev_inode_pair(self) -> tuple[int, int]:
+        s = self._idempotent_fstat
+        return (s.st_dev, s.st_ino)
+
+    def filetype(self) -> _SimpleFileType:
+        return _SimpleFileType.classify(self._idempotent_fstat)
+
+    def user_executable_bit(self) -> bool:
+        return (self._stat().st_mode & stat.S_IXUSR) != 0
+
+    def __hash__(self) -> int:
+        return hash(self._dev_inode_pair)
+    def __eq__(self, other: Any) -> bool:
+        if type(other) is not self.__class__:
+            return NotImplemented
+        return self._dev_inode_pair == other._dev_inode_pair
+    def __ne__(self, other: Any) -> bool:
+        if type(other) is not self.__class__:
+            return NotImplemented
+        return not self == other
+
+
+def format_os_path(path: str, mode: int | Path = Path.unix) -> str:
     """Formats the input path to use consistent, platform specific separators.
 
     Absolute paths are converted between drive letters and a prepended ``/`` as per platform
@@ -43,6 +202,10 @@ def format_os_path(path: str, mode: int = Path.unix) -> str:
     """
     if not path:
         return path
+
+    if not isinstance(mode, Path):
+        mode = Path(mode)
+
     if mode == Path.windows:
         path = path.replace("/", "\\")
     else:
@@ -50,33 +213,54 @@ def format_os_path(path: str, mode: int = Path.unix) -> str:
     return path
 
 
-def convert_to_posix_path(path: str) -> str:
+def convert_to_posix_path(path: str | pathlib.PathLike) -> str:
     """Converts the input path to POSIX style."""
     return format_os_path(path, mode=Path.unix)
+    # return _PathKey(path)._format_platform_path(mode=Path.unix)
 
 
-def convert_to_platform_path(path: str) -> str:
+def convert_to_platform_path(path: str | pathlib.PathLike) -> str:
     """Converts the input path to the current platform's native style."""
     return format_os_path(path, mode=Path.platform_path)
+    # return _PathKey(path)._format_platform_path(mode=Path.platform_path)
 
 
-def path_to_os_path(*parameters: str) -> List[str]:
+def single_iterable[T](x: Iterable[T]) -> T:
+    i = iter(x)
+    try:
+        ret = next(i)
+    except StopIteration:
+        raise ValueError(f"iterable input {x!r} had no elements: should have exactly one!")
+    try:
+        again = next(i)
+    except StopIteration:
+        return ret
+    raise ValueError(f"iterable input {x!r} had more than one element "
+                     "(had {ret!r}, then {again!r})\n"
+                     "should have exactly one!")
+
+
+def last_of_nonempty_iterable[T](x: Iterable[T]) -> T:
+    i = iter(x)
+    count: int = 0
+    try:
+        while True:
+            last = next(i)
+            count += 1
+    except StopIteration:
+        if count == 0:
+            raise ValueError(f"iterable input {x!r} must have at least one element!")
+        return cast(T, last)
+
+
+def path_to_os_path(*parameters: str | pathlib.PathLike) -> Iterable[str]:
     """Takes an arbitrary number of positional parameters, converts each argument of type
     string to use a normalized filepath separator, and returns a list of all values.
     """
-
-    def _is_url(path_or_url: str) -> bool:
-        if "\\" in path_or_url:
-            return False
-        url_tuple = urlparse(path_or_url)
-        return bool(url_tuple.scheme) and len(url_tuple.scheme) > 1
-
-    result = []
-    for item in parameters:
-        if isinstance(item, str) and not _is_url(item):
-            item = convert_to_platform_path(item)
-        result.append(item)
-    return result
+    return tuple(
+        _PathKey(p).format_url_or_platform_path()
+        for p in parameters
+    )
 
 
 def _system_path_filter(_func=None, arg_slice: Optional[slice] = None):

@@ -19,7 +19,7 @@ import spack.repo
 import spack.util.file_cache
 from spack.directory_layout import DirectoryLayout, InvalidDirectoryLayoutParametersError
 from spack.spec import Spec
-from spack.util.path import path_to_os_path
+from spack.util.path import path_to_os_path, single_iterable
 
 # number of packages to test (to reduce test time)
 max_packages = 10
@@ -99,7 +99,7 @@ def test_read_and_write_spec(temporary_store, config, mock_packages):
 
         layout.create_install_directory(spec)
 
-        install_dir = path_to_os_path(layout.path_for_spec(spec))[0]
+        install_dir = single_iterable(path_to_os_path(layout.path_for_spec(spec)))
         spec_path = layout.spec_file_path(spec)
 
         # Ensure directory has been created in right place.

@@ -12,7 +12,6 @@ import random
 import re
 import shutil
 import socket
-import ssl
 import stat
 import sys
 import time
@@ -214,6 +213,7 @@ def custom_ssl_certs() -> Optional[Tuple[bool, str]]:
 
 def ssl_create_default_context():
     """Create the default SSL context for urllib with custom certificates if configured."""
+    import ssl
     certs = custom_ssl_certs()
     if certs is None:
         return ssl.create_default_context()
@@ -241,6 +241,7 @@ def set_curl_env_for_ssl_certs(curl: Executable) -> None:
 
 
 def _urlopen():
+    import ssl
     s3 = UrllibS3Handler()
     gcs = GCSHandler()
     error_handler = SpackHTTPDefaultErrorHandler()
@@ -947,6 +948,7 @@ def _spider(url: urllib.parse.ParseResult, collect_nested: bool, _visited: Set[s
     except OSError as e:
         tty.debug(f"[SPIDER] Unable to read: {url}")
         tty.debug(str(e), level=2)
+        import ssl
         if isinstance(e, URLError) and isinstance(e.reason, ssl.SSLError):
             tty.warn(
                 "Spack was unable to fetch url list due to a "

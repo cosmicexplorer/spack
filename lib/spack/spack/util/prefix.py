@@ -7,7 +7,59 @@ This file contains utilities for managing the installation prefix of a package.
 """
 
 import os
-from typing import Dict
+from pathlib import Path, PurePath
+from typing import TYPE_CHECKING, Dict
+
+if TYPE_CHECKING:
+    from typing import Any, Iterable, Self
+
+
+class _InnerPrefix:
+    _anchor: str | None
+    _tail: tuple[str, ...]
+    __slots__ = ('_anchor', '_tail')
+    def __getnewargs__(self) -> tuple[str | None, tuple[str, ...]]:
+        return (self._anchor, tuple(self._tail))
+    def __new__(cls, anchor: str | None, tail: Iterable[str]) -> Self:
+        if anchor is not None:
+            assert type(anchor) is str, anchor
+            if anchor == '':
+                anchor = None
+            else:
+                assert anchor.endswith(os.path.sep), anchor
+        tail = tuple(tail)
+        for el in tail:
+            assert os.path.sep not in el, el
+        ret = super().__new__(cls)
+        ret._anchor = anchor
+        ret._tail = tail
+        return ret
+    def __str__(self) -> str:
+        if self._anchor is None:
+            return os.path.sep.join(self._tail)
+        return self._anchor + os.path.sep.join(self._tail)
+    def __hash__(self) -> int:
+        return hash(self.__getnewargs__())
+    def __eq__(self, other: Any) -> bool:
+        if type(other) is not self.__class__:
+            return False
+        if self._anchor is None and other._anchor is not None:
+            return False
+        if self._anchor is not None and other._anchor is None:
+            return False
+        return self._anchor == other._anchor and self._tail == other._tail
+    def __ne__(self, other: Any) -> bool:
+        return not self == other
+    def join(self, name: str) -> Self:
+        assert not name.startswith(os.path.sep), name
+        return self.__class__(self._anchor,
+                              self._tail + filter(None, name.split(os.path.sep)))
+    @classmethod
+    def from_path(cls, path: PurePath) -> Self:
+        return cls(path.anchor, path._tail)
+    @classmethod
+    def from_str(cls, s: str) -> Self:
+        return cls.from_path(PurePath(s))
 
 
 class Prefix(str):

@@ -2495,6 +2495,8 @@ class SpackSolverSetup:
             try:
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
+                    if isinstance(compiler_version, vn.GitVersion):
+                        compiler_version = compiler_version.ref_version
                     target.optimization_flags(
                         compiler_name, compiler_version.dotted_numeric_string
                     )

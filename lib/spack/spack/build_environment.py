@@ -59,6 +59,7 @@ from typing import (
     Type,
     Union,
     overload,
+    TYPE_CHECKING,
 )
 
 import spack.vendor.archspec.cpu
@@ -88,7 +89,6 @@ from spack.llnl.util.tty.color import cescape, colorize
 from spack.util.environment import (
     SYSTEM_DIR_CASE_ENTRY,
     EnvironmentModifications,
-    ModificationList,
     PrependPath,
     env_flag,
     filter_system_paths,
@@ -101,6 +101,9 @@ from spack.util.filesystem import join_path, symlink
 from spack.util.lang import dedupe, stable_partition
 from spack.util.log_parse import make_log_context, parse_log_events
 from spack.util.string import plural
+
+if TYPE_CHECKING:
+    from spack.util.environment import ModificationList
 
 #
 # This can be set by the user to globally disable parallel builds.

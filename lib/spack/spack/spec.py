@@ -1643,11 +1643,14 @@ class Spec:
         return modules
 
     @property
-    def external_path(self):
-        return spack.util.path.path_to_os_path(self._external_path)[0]
+    def external_path(self) -> str | None:
+        if self._external_path is None:
+            return None
+        return spack.util.path.single_iterable(spack.util.path.path_to_os_path(self._external_path))
 
     @external_path.setter
-    def external_path(self, ext_path):
+    def external_path(self, ext_path: str | pathlib.PathLike | None) -> None:
+        # import pdb; pdb.set_trace()
         self._external_path = ext_path
 
     @property
@@ -5353,6 +5356,7 @@ class SpecfileReaderBase(abc.ABC):
         spec = Spec()
 
         name, node = cls.name_and_data(node)
+
         for h in ht.HASHES:
             setattr(spec, h.attr, node.get(h.name, None))
 

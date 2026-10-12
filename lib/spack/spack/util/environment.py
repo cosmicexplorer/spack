@@ -3,9 +3,13 @@
 # SPDX-License-Identifier: (Apache-2.0 OR MIT)
 """Set, unset or modify environment variables."""
 
+import abc
 import collections
 import contextlib
+import dataclasses
+import enum
 import inspect
+import functools
 import json
 import os
 import pathlib
@@ -15,17 +19,42 @@ import shlex
 import subprocess
 import sys
 import warnings
-from typing import Any, Callable, Dict, Iterable, List, MutableMapping, Optional, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Tuple,
+    Union,
+    TYPE_CHECKING,
+)
 
 import spack.error
 from spack.llnl.util import tty
-from spack.util.lang import dedupe
-from spack.util.path import path_to_os_path, system_path_filter
+from spack.util.lang import classproperty, dedupe
+from spack.util.path import (
+    last_of_nonempty_iterable,
+    path_to_os_path,
+    single_iterable,
+    system_path_filter,
+)
 
-# List is invariant, so List[str] is not a subtype of List[Union[str, pathlib.PurePath]].
-# Sequence is covariant, but because str itself is a subtype of Sequence[str], we cannot exclude it
-# in the type hint. So, use an awkward union type to allow (mixed) str and PurePath items.
-ListOfPaths = Union[List[str], List[pathlib.PurePath], List[Union[str, pathlib.PurePath]]]
+if TYPE_CHECKING:
+    from collections.abc import Hashable
+
+    # List is invariant, so List[str] is not a subtype of List[Union[str, pathlib.PurePath]].
+    # Sequence is covariant, but because str itself is a subtype of Sequence[str], we cannot
+    # exclude it
+    # in the type hint. So, use an awkward union type to allow (mixed) str and PurePath items.
+    ListOfPaths = Union[List[str], List[pathlib.PurePath], List[Union[str, pathlib.PurePath]]]
+
+    Path = str
+    ModificationList = Iterable['_NameModBase']
 
 
 if sys.platform == "win32":
@@ -67,9 +96,6 @@ _SHELL_UNSET_STRINGS = {
 
 
 TRACING_ENABLED = False
-
-Path = str
-ModificationList = List[Union["NameModifier", "NameValueModifier"]]
 
 
 def is_system_path(path: Path) -> bool:
@@ -153,10 +179,11 @@ def _nix_env_var_to_source_line(var: str, val: str) -> str:
     return source_line
 
 
-def _env_var_to_source_line(var: str, val: str) -> str:
-    if sys.platform == "win32":
+if sys.platform == "win32":
+    def _env_var_to_source_line(var: str, val: str) -> str:
         return _win_env_var_to_set_line(var, val)
-    else:
+else:
+    def _env_var_to_source_line(var: str, val: str) -> str:
         return _nix_env_var_to_source_line(var, val)
 
 
@@ -224,7 +251,13 @@ def set_env(**kwargs):
 
 
 class Trace:
-    """Trace information on a function call"""
+    """Trace information on a function call.
+
+    This is in particular used to record changes made to the environment and map them to the
+    corresponding Python code. In particular, :class:`EnvironmentModifications` invokes its private
+    ``_trace()`` method to generate a backtrace-like context for the *calling* Python code
+    modifying the environment. This will very typically be in a ``package.py`` file, or within the
+    corresponding Python definition for a *build system*."""
 
     __slots__ = ("filename", "lineno", "context")
 
@@ -375,7 +408,7 @@ class AppendPath(NamePathModifier):
         tty.debug(f"AppendPath: {self.name}+{self.value}", level=3)
         environment_value = env.get(self.name, "")
         directories = environment_value.split(self.separator) if environment_value else []
-        directories.append(path_to_os_path(os.path.normpath(self.value)).pop())
+        directories.append(last_of_nonempty_iterable(path_to_os_path(os.path.normpath(self.value))))
         env[self.name] = self.separator.join(directories)
 
 
@@ -384,7 +417,10 @@ class PrependPath(NamePathModifier):
         tty.debug(f"PrependPath: {self.name}+{self.value}", level=3)
         environment_value = env.get(self.name, "")
         directories = environment_value.split(self.separator) if environment_value else []
-        directories = [path_to_os_path(os.path.normpath(self.value)).pop()] + directories
+        directories = [
+            last_of_nonempty_iterable(path_to_os_path(os.path.normpath(self.value))),
+            *directories,
+        ]
         env[self.name] = self.separator.join(directories)
 
 
@@ -393,8 +429,11 @@ class RemoveFirstPath(NamePathModifier):
         tty.debug(f"RemoveFirstPath: {self.name}-{self.value}", level=3)
         environment_value = env.get(self.name, "")
         directories = environment_value.split(self.separator)
-        directories = [path_to_os_path(os.path.normpath(x)).pop() for x in directories]
-        val = path_to_os_path(os.path.normpath(self.value)).pop()
+        directories = [
+            last_of_nonempty_iterable(path_to_os_path(os.path.normpath(x)))
+            for x in directories
+        ]
+        val = last_of_nonempty_iterable(path_to_os_path(os.path.normpath(self.value)))
         if val in directories:
             directories.remove(val)
         env[self.name] = self.separator.join(directories)
@@ -405,8 +444,11 @@ class RemoveLastPath(NamePathModifier):
         tty.debug(f"RemoveLastPath: {self.name}-{self.value}", level=3)
         environment_value = env.get(self.name, "")
         directories = environment_value.split(self.separator)[::-1]
-        directories = [path_to_os_path(os.path.normpath(x)).pop() for x in directories]
-        val = path_to_os_path(os.path.normpath(self.value)).pop()
+        directories = [
+            last_of_nonempty_iterable(path_to_os_path(os.path.normpath(x)))
+            for x in directories
+        ]
+        val = last_of_nonempty_iterable(path_to_os_path(os.path.normpath(self.value)))
         if val in directories:
             directories.remove(val)
         env[self.name] = self.separator.join(directories[::-1])
@@ -417,10 +459,11 @@ class RemovePath(NamePathModifier):
         tty.debug(f"RemovePath: {self.name}-{self.value}", level=3)
         environment_value = env.get(self.name, "")
         directories = environment_value.split(self.separator)
+        val = last_of_nonempty_iterable(path_to_os_path(os.path.normpath(self.value)))
         directories = [
-            path_to_os_path(os.path.normpath(x)).pop()
+            last_of_nonempty_iterable(path_to_os_path(os.path.normpath(x)))
             for x in directories
-            if x != path_to_os_path(os.path.normpath(self.value)).pop()
+            if x != val
         ]
         env[self.name] = self.separator.join(directories)
 
@@ -431,7 +474,7 @@ class DeprioritizeSystemPaths(NameModifier):
         environment_value = env.get(self.name, "")
         directories = environment_value.split(self.separator) if environment_value else []
         directories = deprioritize_system_paths(
-            [path_to_os_path(os.path.normpath(x)).pop() for x in directories]
+            [last_of_nonempty_iterable(path_to_os_path(os.path.normpath(x))) for x in directories]
         )
         env[self.name] = self.separator.join(directories)
 
@@ -442,7 +485,8 @@ class PruneDuplicatePaths(NameModifier):
         environment_value = env.get(self.name, "")
         directories = environment_value.split(self.separator) if environment_value else []
         directories = prune_duplicate_paths(
-            [path_to_os_path(os.path.normpath(x)).pop() for x in directories]
+            [last_of_nonempty_iterable(path_to_os_path(os.path.normpath(x)))
+             for x in directories]
         )
         env[self.name] = self.separator.join(directories)
 

@@ -30,19 +30,26 @@ from typing import (
     Generator,
     Iterable,
     List,
+    Literal,
     Match,
     Optional,
     Sequence,
     Set,
     Tuple,
     Union,
+    overload,
 )
 
 from spack.llnl.util import tty
 from spack.util import lang
 from spack.util.executable import Executable
 from spack.util.lang import dedupe, fnmatch_translate_multiple, memoized
-from spack.util.path import path_to_os_path, sanitize_win_longpath, system_path_filter
+from spack.util.path import (
+    path_to_os_path,
+    sanitize_win_longpath,
+    single_iterable,
+    system_path_filter,
+)
 
 if sys.platform == "win32":
     from ctypes import wintypes
@@ -311,11 +318,12 @@ def filter_file(
     it can contain ``\1``, ``\2``, etc. to represent back-substitution as sed would allow.
 
     Args:
-        regex: The regular expression to search for
-        repl: The string to replace matches with
-        *filenames: One or more files to search and replace string: Treat regex as a plain string.
-            Default it False backup: Make backup file(s) suffixed with ``~``. Default is False
-        ignore_absent: Ignore any files that don't exist. Default is False
+        regex: The regular expression to search for.
+        repl: The string to replace matches with.
+        *filenames: One or more files to search and replace.
+        string: Treat regex as a plain string. Default is False.
+        backup: Make backup file(s) suffixed with ``~``. Default is False.
+        ignore_absent: Ignore any files that don't exist. Default is False.
         start_at: Marker used to start applying the replacements. If a text line matches this
             marker filtering is started at the next line. All contents before the marker and the
             marker itself are copied verbatim. Default is to start filtering from the first line of
@@ -323,8 +331,8 @@ def filter_file(
         stop_at: Marker used to stop scanning the file further. If a text line matches this marker
             filtering is stopped and the rest of the file is copied verbatim. Default is to filter
             until the end of the file.
-        encoding: The encoding to use when reading and writing the files. Default is None, which
-            uses the system's default encoding.
+        encoding: The encoding to use when reading and writing the files. If set explicitly to None,
+            this uses the system's default encoding. Default is "utf-8".
     """
     # Allow strings to use \1, \2, etc. for replacement, like sed
     if not callable(repl):
@@ -1023,7 +1031,7 @@ def chgrp_if_not_world_writable(path, group):
 
 
 def mkdirp(
-    *paths: str,
+    *paths: pathlib.PathLike,
     mode: Optional[int] = None,
     group: Optional[Union[str, int]] = None,
     default_perms: Optional[str] = None,
@@ -1125,13 +1133,21 @@ def force_remove(*paths: str) -> None:
             pass
 
 
+@overload
+def working_dir(dirname: pathlib.PathLike, *, create: bool):
+    ...
+
+@overload
+def working_dir(dirname: int):
+    ...
+
 @contextmanager
 @system_path_filter
-def working_dir(dirname: str, *, create: bool = False):
+def working_dir(dirname: pathlib.PathLike | int, *, create: bool = False):
     """Context manager to change the current working directory to ``dirname``.
 
     Args:
-        dirname: the directory to change to
+        dirname: the directory to change to (path or fd)
         create: if :obj:`True`, create the directory if it does not exist
 
     Example usage::
@@ -1139,8 +1155,13 @@ def working_dir(dirname: str, *, create: bool = False):
        with working_dir("/path/to/dir"):
            # do something in /path/to/dir
            pass
+
+    :raises:`TypeError` if a ``dirname`` fd and ``create=True`` are both given.
     """
     if create:
+        if isinstance(dirname, int):
+            raise TypeError(f"providing a file-descriptor 'dirname' argument {dirname} "
+                            "does not allow for the create=True argument!")
         mkdirp(dirname)
 
     orig_dir = os.getcwd()
@@ -2138,7 +2159,7 @@ class HeaderList(FileList):
         if isinstance(value, str):
             value = [value]
 
-        self._directories = [path_to_os_path(os.path.normpath(x))[0] for x in value]
+        self._directories = list(path_to_os_path(*(os.path.normpath(x) for x in value)))
 
     def _default_directories(self):
         """Default computation of directories based on the list of

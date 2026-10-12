@@ -231,6 +231,9 @@ class ExternalSpecsParser:
             node._finalize_concretization()
 
     def _create_edges(self):
+        # FIXME: this presumes that a compiler cannot have any external dependencies upon other
+        #        packages, e.g. a libc.
+        #        Why is this?
         for eid, entry in self.specs_by_external_id.items():
             current_node, current_dict = entry.spec, entry.config
             line_info = _line_info(current_dict)

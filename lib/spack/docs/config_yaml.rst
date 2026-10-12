@@ -304,12 +304,3 @@ The limit is evaluated after each concretization run; if Spack has stored more r
 
 Setting this value to 0 disables automatic pruning.
 It is expected that users will be responsible for maintaining this cache.
-
-``concretization_cache:size_limit``
------------------------------------
-
-Sets a limit on the size of the concretization cache in bytes.
-The limit is evaluated after each concretization run; if Spack has stored more results than the limit allows, the oldest concretization results are pruned until 10% of the limit has been removed.
-
-Setting this value to 0 disables automatic pruning.
-It is expected that users will be responsible for maintaining this cache.
